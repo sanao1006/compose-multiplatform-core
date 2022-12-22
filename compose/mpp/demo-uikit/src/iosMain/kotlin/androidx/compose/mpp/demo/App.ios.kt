@@ -17,37 +17,11 @@
 // Use `xcodegen` first, then `open ./DemoUikit.xcodeproj` and then Run button in XCode.
 package androidx.compose.mpp.demo
 
-import kotlinx.cinterop.*
-import platform.UIKit.*
-import platform.Foundation.*
+import androidx.compose.ui.main.defaultUIKitMain
+import androidx.compose.ui.window.Application
 
 fun main() {
-    val args = emptyArray<String>()
-    memScoped {
-        val argc = args.size + 1
-        val argv = (arrayOf("demoApp") + args).map { it.cstr.ptr }.toCValues()
-        autoreleasepool {
-            UIApplicationMain(argc, argv, null, NSStringFromClass(DemoAppDelegate))
-        }
-    }
-}
-
-class DemoAppDelegate : UIResponder, UIApplicationDelegateProtocol {
-    companion object : UIResponderMeta(), UIApplicationDelegateProtocolMeta
-
-    @ObjCObjectBase.OverrideInit
-    constructor() : super()
-
-    private var _window: UIWindow? = null
-    override fun window() = _window
-    override fun setWindow(window: UIWindow?) {
-        _window = window
-    }
-
-    override fun application(application: UIApplication, didFinishLaunchingWithOptions: Map<Any?, *>?): Boolean {
-        window = UIWindow(frame = UIScreen.mainScreen.bounds)
-        window!!.rootViewController = getViewControllerWithCompose()
-        window!!.makeKeyAndVisible()
-        return true
-    }
+    defaultUIKitMain("DemoApp", Application("DemoApp") {
+        UIKitDemoApp()
+    })
 }
