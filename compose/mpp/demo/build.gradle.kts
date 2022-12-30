@@ -19,17 +19,15 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
+    kotlin("native.cocoapods")
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
     id("kotlin-multiplatform")
     id("application")
 }
+project.setBuildDir("build")
 
 AndroidXComposePlugin.applyAndConfigureKotlinPlugin(project)
-
-dependencies {
-
-}
 
 val resourcesDir = "$buildDir/resources"
 val skikoWasm by configurations.creating
@@ -105,6 +103,17 @@ kotlin {
             }
         }
     }
+    cocoapods {
+        version = "0.0.0"
+        summary = "Shared code for the UIKit demo"
+        homepage = "https://github.com/JetBrains/compose-jb"
+        ios.deploymentTarget = "14.1"
+        podfile = project.file("../iosApp/Podfile")
+        framework {
+            baseName = "demo"
+            isStatic = true
+        }
+    }
     sourceSets {
         val commonMain by getting {
              dependencies {
@@ -142,67 +151,5 @@ kotlin {
         val uikitX64Main by getting { dependsOn(uikitMain) }
         val uikitArm64Main by creating { dependsOn(uikitMain) }
         val uikitSimArm64Main by getting { dependsOn(uikitMain) }
-    }
-}
-
-enum class Target(val simulator: Boolean, val key: String) {
-    UIKIT_X64(true, "uikitX64"), UIKIT_ARM64(false, "uikitArm64"), UIKIT_SIM_ARM64(true, "uikitSimArm64"),
-}
-
-if (System.getProperty("os.name") == "Mac OS X") {
-// Create Xcode integration tasks.
-    val sdkName: String? = System.getenv("SDK_NAME")
-
-    val target = sdkName.orEmpty().let {
-        when {
-            it.startsWith("iphoneos") -> Target.UIKIT_ARM64
-            it.startsWith("iphonesimulator") -> {
-                if (System.getProperty("os.arch") == "aarch64") {
-                    Target.UIKIT_SIM_ARM64
-                } else {
-                    Target.UIKIT_X64
-                }
-            }
-            else -> Target.UIKIT_X64
-        }
-    }
-
-    val targetBuildDir: String? = System.getenv("TARGET_BUILD_DIR")
-    val executablePath: String? = System.getenv("EXECUTABLE_PATH")
-    val buildType = System.getenv("CONFIGURATION")?.let {
-        org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.valueOf(it.toUpperCase())
-    } ?: org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.DEBUG
-
-    val currentTarget = kotlin.targets[target.key] as org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
-    val kotlinBinary = currentTarget.binaries.getExecutable(buildType)
-    val xcodeIntegrationGroup = "Xcode integration"
-
-    val packForXCode = if (sdkName == null || targetBuildDir == null || executablePath == null) {
-        // The build is launched not by Xcode ->
-        // We cannot create a copy task and just show a meaningful error message.
-        tasks.create("packForXCode").doLast {
-            throw IllegalStateException("Please run the task from Xcode")
-        }
-    } else {
-        // Otherwise copy the executable into the Xcode output directory.
-        tasks.create("packForXCode", Copy::class.java) {
-            dependsOn(kotlinBinary.linkTask)
-
-            destinationDir = file(targetBuildDir)
-
-            val dsymSource = kotlinBinary.outputFile.absolutePath + ".dSYM"
-            val dsymDestination = File(executablePath).parentFile.name + ".dSYM"
-            val oldExecName = kotlinBinary.outputFile.name
-            val newExecName = File(executablePath).name
-
-            from(dsymSource) {
-                into(dsymDestination)
-                rename(oldExecName, newExecName)
-            }
-
-            from(kotlinBinary.outputFile) {
-                rename { executablePath }
-            }
-        }
     }
 }

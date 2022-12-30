@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 
 @Composable
-fun myContent() {
+internal fun myContent() {
     var tick by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(false) }
     var clutz by remember { mutableStateOf(false) }
