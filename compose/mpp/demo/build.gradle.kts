@@ -108,7 +108,7 @@ kotlin {
         summary = "Shared code for the UIKit demo"
         homepage = "https://github.com/JetBrains/compose-jb"
         ios.deploymentTarget = "14.1"
-        podfile = project.file("../iosApp/Podfile")
+        podfile = project.file("../uikitApp/Podfile")
         framework {
             baseName = "demo"
             isStatic = true

@@ -40,12 +40,6 @@ internal fun myContent() {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
     Column {
-        TextField(
-            value = textFieldState,
-            onValueChange = {
-                textFieldState = it
-            }
-        )
         Box(
             modifier = Modifier
                 .padding(16.dp)
@@ -122,7 +116,12 @@ internal fun myContent() {
                 Text(textFromClipboard)
             }
         }
-
+        TextField(
+            value = textFieldState,
+            onValueChange = {
+                textFieldState = it
+            }
+        )
     }
     LaunchedEffect(Unit) {
         while (true) {
