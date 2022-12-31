@@ -18,11 +18,11 @@ pod install
 open UIKitDemo.xcworkspace
 ```
 
-- Choose simulator and press "Start"
+- Choose simulator and press "Start"  
   ![start-in-xcode.png](start-in-xcode.png)
 
 - To run on real device, you can set your TEAM_ID in [Configuration/TeamId.xcconfig](Configuration%2FTeamId.xcconfig).
-  Or set your Team in "Signing & Capabilities" settings
+  Or set your Team in "Signing & Capabilities" settings  
   ![xcode-team-id.png](xcode-team-id.png)
 
 ## Run UIKitDemo with AppCode
@@ -30,5 +30,5 @@ open UIKitDemo.xcworkspace
 - Install KMM plugin
 - Open directory compose/frameworks/support in AppCode
 - Wait while AppCode syncing gradle project
-- Choose run configuration and specify simulator
+- Choose run configuration and specify simulator  
   ![appcode-run-configuration.png](appcode-run-configuration.png)
