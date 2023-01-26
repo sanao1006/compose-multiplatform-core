@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import Foundation
 import UIKit
 import SwiftUI
 import shared
@@ -30,4 +31,39 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
     }
 
+}
+
+extension UIView {
+    func takeTextureSnapshot() -> MTLTexture? {
+        createMTLTexture(self, MTLCreateSystemDefaultDevice()!)
+    }
+}
+
+func createMTLTexture(_ uiView: UIView, _ device: MTLDevice) -> MTLTexture? {//todo remove
+    let width = Int(uiView.bounds.width)
+    let height = Int(uiView.bounds.height)
+
+    if let context = CGContext(data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+       let data = context.data {
+        uiView.layer.render(in: context)
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,
+                width: width,
+                height: height,
+                mipmapped: false)
+        if let texture = device.makeTexture(descriptor: desc) {
+            texture.replace(region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: data,
+                    bytesPerRow: context.bytesPerRow)
+            return texture
+        }
+    }
+    return nil
 }

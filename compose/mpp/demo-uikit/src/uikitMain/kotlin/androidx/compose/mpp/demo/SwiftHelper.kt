@@ -16,8 +16,27 @@
 
 package androidx.compose.mpp.demo
 
+import cnames.structs.CGContext
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGBitmapContextCreate
+import platform.CoreGraphics.CGBitmapContextGetBytesPerRow
+import platform.CoreGraphics.CGBitmapContextGetData
+import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
+import platform.CoreGraphics.CGImageAlphaInfo
+import platform.Metal.MTLCreateSystemDefaultDevice
+import platform.Metal.MTLDeviceProtocol
+import platform.Metal.MTLPixelFormatA1BGR5Unorm
+import platform.Metal.MTLPixelFormatRGBA8Unorm
+import platform.Metal.MTLRegionMake2D
+import platform.Metal.MTLTextureDescriptor
+import platform.Metal.MTLTextureProtocol
+import platform.UIKit.UISwitch
+import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 
 class SwiftHelper {
-    fun getViewController(): UIViewController = getViewControllerWithCompose()
+    fun getViewController(): UIViewController =
+        getViewControllerWithCompose()
 }
+

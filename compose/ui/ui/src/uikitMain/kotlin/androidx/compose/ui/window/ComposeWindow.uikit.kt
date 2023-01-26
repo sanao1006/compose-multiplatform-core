@@ -17,10 +17,14 @@
 package androidx.compose.ui.window
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.createSkiaLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toSkiaRect
+import androidx.compose.ui.interop.LocalLayerContainer
+import androidx.compose.ui.interop.SkikoBackendTextureToImage
+import androidx.compose.ui.interop.SkikoTouchEventHandler
 import androidx.compose.ui.native.ComposeLayer
 import androidx.compose.ui.platform.Platform
 import androidx.compose.ui.platform.TextToolbar
@@ -32,16 +36,21 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+import kotlinx.cinterop.CValue
 import androidx.compose.ui.unit.toOffset
 import kotlin.math.roundToInt
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExportObjCClass
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.useContents
+import org.jetbrains.skia.GrBackendTexture
+import org.jetbrains.skia.Point
 import org.jetbrains.skiko.SkikoUIView
 import org.jetbrains.skiko.TextActions
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGSize
 import platform.CoreGraphics.CGSize
 import platform.Foundation.NSCoder
 import platform.Foundation.NSNotification
@@ -49,9 +58,14 @@ import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSSelectorFromString
 import platform.Foundation.NSValue
 import platform.UIKit.CGRectValue
+import platform.UIKit.UIEvent
 import platform.UIKit.UIScreen
+import platform.UIKit.UITouch
+import platform.UIKit.UITouchPhase
+import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 import platform.UIKit.UIViewControllerTransitionCoordinatorProtocol
+import platform.UIKit.addSubview
 import platform.UIKit.reloadInputViews
 import platform.UIKit.setClipsToBounds
 import platform.UIKit.setNeedsDisplay
@@ -130,8 +144,16 @@ internal actual class ComposeWindow : UIViewController {
 
     override fun loadView() {
         val skiaLayer = createSkiaLayer()
-        val skikoUIView = SkikoUIView(skiaLayer).load()
-        view = skikoUIView
+        val skikoUIView = SkikoUIView(
+            skiaLayer = skiaLayer,
+            hitTest = { point: Point, withEvent: UIEvent? ->
+                val isInteropView = layer.scene.mainOwner?.hitInterop(Offset(point.x, point.y), true) ?: false
+                !isInteropView
+            },
+        ).load()
+        val rootView = UIView()
+        rootView.addSubview(skikoUIView)
+        view = rootView
         val uiKitTextInputService = UIKitTextInputService(
             showSoftwareKeyboard = {
                 skikoUIView.showScreenKeyboard()
@@ -193,7 +215,19 @@ internal actual class ComposeWindow : UIViewController {
             getTopLeftOffset = ::getTopLeftOffset,
             input = uiKitTextInputService.skikoInput,
         )
-        layer.setContent(content = content)
+        layer.setContent(content = {
+            CompositionLocalProvider(
+                LocalLayerContainer provides rootView,
+                SkikoTouchEventHandler provides {
+                    skiaLayer.skikoView?.onTouchEvent(it)
+                },
+                SkikoBackendTextureToImage provides { texture: GrBackendTexture ->
+                    skiaLayer.backendTextureToImage(texture)
+                },
+            ) {
+                content()
+            }
+        })
     }
 
     override fun viewWillTransitionToSize(
@@ -208,12 +242,16 @@ internal actual class ComposeWindow : UIViewController {
         super.viewWillTransitionToSize(size, withTransitionCoordinator)
     }
 
-    override fun viewWillAppear(animated: Boolean) {
-        super.viewDidAppear(animated)
+    override fun viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
         val (width, height) = getViewFrameSize()
         layer.setDensity(density)
         val scale = density.density
         layer.setSize((width * scale).roundToInt(), (height * scale).roundToInt())
+    }
+
+    override fun viewDidAppear(animated: Boolean) {
+        super.viewDidAppear(animated)
         NSNotificationCenter.defaultCenter.addObserver(
             observer = keyboardVisibilityListener,
             selector = NSSelectorFromString("keyboardWillShow:"),
@@ -236,6 +274,7 @@ internal actual class ComposeWindow : UIViewController {
 
     // viewDidUnload() is deprecated and not called.
     override fun viewDidDisappear(animated: Boolean) {
+        super.viewDidDisappear(animated)
         this.dispose()
         NSNotificationCenter.defaultCenter.removeObserver(
             observer = keyboardVisibilityListener,
@@ -252,6 +291,11 @@ internal actual class ComposeWindow : UIViewController {
             name = platform.UIKit.UIKeyboardDidHideNotification,
             `object` = null
         )
+    }
+
+    override fun didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        TODO("didReceiveMemoryWarning, maybe memory leak")
     }
 
     actual fun setContent(
