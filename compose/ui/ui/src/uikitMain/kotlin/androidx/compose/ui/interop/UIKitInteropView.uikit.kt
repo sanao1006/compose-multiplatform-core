@@ -84,40 +84,6 @@ import platform.darwin.dispatch_get_main_queue
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()//todo hardcode
 
-fun createMetalTexture(uiView: UIView, device: MTLDeviceProtocol): MTLTextureProtocol? {//todo move to skiko
-    val (width, height) = uiView.bounds().useContents { size.width to size.height }
-    val context: CPointer<CGContext>? = CGBitmapContextCreate(
-        null,
-        width.toULong(),
-        height.toULong(),
-        8,
-        0,
-        CGColorSpaceCreateDeviceRGB(),
-        CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
-    )
-    val data = CGBitmapContextGetData(context)
-    if (data != null) {
-        val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
-            pixelFormat = MTLPixelFormatRGBA8Unorm,
-            width = width.toULong(),
-            height = height.toULong(),
-            mipmapped = false
-        )
-        val texture = device.newTextureWithDescriptor(desc)
-        if (texture != null) {
-            uiView.layer.renderInContext(context)
-            texture.replaceRegion(
-                region = MTLRegionMake2D(0, 0, width.toULong(), height.toULong()),
-                mipmapLevel = 0,
-                withBytes = data,
-                bytesPerRow = CGBitmapContextGetBytesPerRow(context)
-            )
-            return texture
-        }
-    }
-    return null
-}
-
 /**
  * TODO doc
  */
@@ -212,10 +178,13 @@ public fun <T : UIView> UIKitInteropView(
                 }
             }
         }.drawBehind {
-            if (false) drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)
-            drawIntoCanvas {canvas->
-                if (mtlSkikoImage != null) {
-                    canvas.nativeCanvas.drawImage(mtlSkikoImage, 0f, 0f)
+            if (false) {
+                drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)
+            } else {
+                drawIntoCanvas {canvas->
+                    if (mtlSkikoImage != null) {
+                        canvas.nativeCanvas.drawImage(mtlSkikoImage, 0f, 0f)
+                    }
                 }
             }
         }.then(UIKitInteropModifier(rectInPixels.width, rectInPixels.height))
@@ -455,9 +424,3 @@ private class Updater<T : UIView>(
         isDisposed = true
     }
 }
-
-fun UIView.toMtlTexture(): MTLTextureProtocol? {
-    val device = MTLCreateSystemDefaultDevice() ?: error("Failed to create MTLCreateSystemDefaultDevice")
-    return createMetalTexture(this, device)
-}
-

@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
-import kotlinx.cinterop.CValue
 import androidx.compose.ui.unit.toOffset
 import kotlin.math.roundToInt
 import kotlinx.cinterop.CValue
@@ -50,7 +49,6 @@ import org.jetbrains.skiko.SkikoUIView
 import org.jetbrains.skiko.TextActions
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
-import platform.CoreGraphics.CGSize
 import platform.CoreGraphics.CGSize
 import platform.Foundation.NSCoder
 import platform.Foundation.NSNotification
@@ -147,7 +145,7 @@ internal actual class ComposeWindow : UIViewController {
         val skikoUIView = SkikoUIView(
             skiaLayer = skiaLayer,
             hitTest = { point: Point, withEvent: UIEvent? ->
-                val isInteropView = layer.scene.mainOwner?.hitInterop(Offset(point.x, point.y), true) ?: false
+                val isInteropView = layer.scene.mainOwner?.hitInterop(Offset(point.x * density.density, point.y * density.density), true) ?: false
                 !isInteropView
             },
         ).load()
@@ -258,7 +256,7 @@ internal actual class ComposeWindow : UIViewController {
         layer.setDensity(density)
         val scale = density.density
         layer.setSize((width * scale).roundToInt(), (height * scale).roundToInt())
-    }
+    }//todo check density on widgets gallery
 
     override fun viewDidAppear(animated: Boolean) {
         super.viewDidAppear(animated)
