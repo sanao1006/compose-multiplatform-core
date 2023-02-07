@@ -153,12 +153,10 @@ public fun <T : UIView> UIKitInteropView(
                     CGColorSpaceCreateDeviceRGB(),
                     CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
                 )
-                val data = CGBitmapContextGetData(context)
-                if (data != null) {
-                    if (texture != null) {
-                        uiView.scale(density)
-                        componentInfo.container.layer.renderInContext(context)
-                        uiView.scale(1f)
+                if (texture != null) {
+                    uiView.scale(density)
+                    componentInfo.container.layer.renderInContext(context)
+                    uiView.scale(1f)
 
 //                        CGContextSetLineWidth(context, 2.0)
 //                        val components = cValuesOf(0.0, 0.0, 1.0, 1.0)
@@ -166,13 +164,12 @@ public fun <T : UIView> UIKitInteropView(
 //                        val square = CGRectMake(0.0, 0.0, 50.0, 50.0)
 //                        CGContextFillRect(context, square)
 
-                        texture!!.replaceRegion(
-                            region = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong()),
-                            mipmapLevel = 0,
-                            withBytes = data,
-                            bytesPerRow = CGBitmapContextGetBytesPerRow(context)
-                        )
-                    }
+                    texture!!.replaceRegion(
+                        region = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong()),
+                        mipmapLevel = 0,
+                        withBytes = CGBitmapContextGetData(context),
+                        bytesPerRow = CGBitmapContextGetBytesPerRow(context)
+                    )
                 }
             }
         }
