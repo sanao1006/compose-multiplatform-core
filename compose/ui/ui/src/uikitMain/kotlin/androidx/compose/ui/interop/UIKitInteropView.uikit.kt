@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.UIKitInteropModifier
@@ -47,25 +48,33 @@ import androidx.compose.ui.unit.round
 import cnames.structs.CGContext
 import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.cValue
 import kotlinx.cinterop.useContents
 import org.jetbrains.skia.GrBackendTexture
 import org.jetbrains.skia.Image
 import org.jetbrains.skiko.SkikoTouchEvent
 import org.jetbrains.skiko.SkikoTouchEventKind
 import org.jetbrains.skiko.createFromMetalTexture
+import platform.CoreGraphics.CGAffineTransformConcat
+import platform.CoreGraphics.CGAffineTransformIdentity
+import platform.CoreGraphics.CGAffineTransformMakeTranslation
+import platform.CoreGraphics.CGAffineTransformScale
 import platform.CoreGraphics.CGBitmapContextCreate
 import platform.CoreGraphics.CGBitmapContextGetBytesPerRow
 import platform.CoreGraphics.CGBitmapContextGetData
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreGraphics.CGImageAlphaInfo
+import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.Metal.MTLCreateSystemDefaultDevice
-import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLPixelFormatRGBA8Unorm
 import platform.Metal.MTLRegionMake2D
 import platform.Metal.MTLTextureDescriptor
 import platform.Metal.MTLTextureProtocol
 import platform.QuartzCore.CATransaction
+import platform.QuartzCore.CATransform3DConcat
+import platform.QuartzCore.CATransform3DMakeScale
+import platform.QuartzCore.CATransform3DMakeTranslation
 import platform.UIKit.UIColor
 import platform.UIKit.UIEvent
 import platform.UIKit.UITouch
@@ -75,6 +84,7 @@ import platform.UIKit.backgroundColor
 import platform.UIKit.insertSubview
 import platform.UIKit.layoutIfNeeded
 import platform.UIKit.removeFromSuperview
+import platform.UIKit.setContentScaleFactor
 import platform.UIKit.setFrame
 import platform.UIKit.setNeedsDisplay
 import platform.UIKit.setNeedsUpdateConstraints
@@ -93,7 +103,8 @@ public fun <T : UIView> UIKitInteropView(
     factory: () -> T,
     modifier: Modifier = Modifier,
     update: (T) -> Unit = NoOpUpdate,
-    dispose: (T) -> Unit = {}
+    dispose: (T) -> Unit = {},
+    useMetalTexture: Boolean = true,
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
 
@@ -121,7 +132,7 @@ public fun <T : UIView> UIKitInteropView(
         while (true) {
             withFrameNanos { it }
             val uiView = componentInfo.component
-            val size = uiView.bounds().useContents { IntSize(size.width.toInt(), size.height.toInt()) }
+            val size = uiView.bounds().useContents { IntSize((size.width * density).toInt(), (size.height * density).toInt()) }
             if (size.width != 0 && size.height != 0) {
                 if (uiViewSize != size) {
                     uiViewSize = size
@@ -145,7 +156,16 @@ public fun <T : UIView> UIKitInteropView(
                 val data = CGBitmapContextGetData(context)
                 if (data != null) {
                     if (texture != null) {
-                        uiView.layer.renderInContext(context)
+                        uiView.scale(density)
+                        componentInfo.container.layer.renderInContext(context)
+                        uiView.scale(1f)
+
+//                        CGContextSetLineWidth(context, 2.0)
+//                        val components = cValuesOf(0.0, 0.0, 1.0, 1.0)
+//                        CGContextSetFillColor(context, components)
+//                        val square = CGRectMake(0.0, 0.0, 50.0, 50.0)
+//                        CGContextFillRect(context, square)
+
                         texture!!.replaceRegion(
                             region = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong()),
                             mipmapLevel = 0,
@@ -178,14 +198,17 @@ public fun <T : UIView> UIKitInteropView(
                 }
             }
         }.drawBehind {
-            if (false) {
-                drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)
-            } else {
+            if (useMetalTexture) {
                 drawIntoCanvas {canvas->
                     if (mtlSkikoImage != null) {
+                        canvas.drawRect(0f, 0f, uiViewSize.width.toFloat(), uiViewSize.height.toFloat(), Paint().apply {
+                            color = background
+                        })
                         canvas.nativeCanvas.drawImage(mtlSkikoImage, 0f, 0f)
                     }
                 }
+            } else {
+                drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)
             }
         }.then(UIKitInteropModifier(rectInPixels.width, rectInPixels.height))
     ) {
@@ -270,7 +293,9 @@ public fun <T : UIView> UIKitInteropView(
         }
     }
     SideEffect {
-        componentInfo.container.backgroundColor = parseColor(background)
+        if(!useMetalTexture) {
+            componentInfo.container.backgroundColor = parseColor(background)
+        }
         componentInfo.updater.update = update
     }
 }
@@ -423,4 +448,9 @@ private class Updater<T : UIView>(
         snapshotObserver.clear()
         isDisposed = true
     }
+}
+
+fun UIView.scale(scale: Float) {//todo scale needs as workaround to correctly handle density
+    layer.anchorPoint = CGPointMake(0.0, 0.0)
+    layer.transform = CATransform3DMakeScale(scale.toDouble(), scale.toDouble(), 1.0)
 }
