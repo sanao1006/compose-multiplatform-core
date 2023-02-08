@@ -1047,3 +1047,9 @@ includeProject(":placeholder-tests")
 
 // Workaround for b/203825166
 includeBuild("placeholder")
+
+//includeBuild("/Users/dim/Desktop/github/JetBrains/skiko2/skiko") {
+//    dependencySubstitution {
+//        substitute(module("org.jetbrains.skiko:skiko")).using(project(":"))
+//    }
+//}

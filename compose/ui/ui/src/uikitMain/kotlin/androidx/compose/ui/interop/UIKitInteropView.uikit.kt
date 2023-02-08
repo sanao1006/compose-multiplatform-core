@@ -64,6 +64,7 @@ import platform.CoreGraphics.CGBitmapContextGetBytesPerRow
 import platform.CoreGraphics.CGBitmapContextGetData
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreGraphics.CGImageAlphaInfo
+import platform.CoreGraphics.CGLayerGetContext
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.Metal.MTLCreateSystemDefaultDevice
