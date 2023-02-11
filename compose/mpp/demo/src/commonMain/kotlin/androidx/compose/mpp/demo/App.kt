@@ -16,10 +16,8 @@ import androidx.compose.material.RadioButton
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
-import androidx.compose.runtime.Applier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,18 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
-import kotlinx.serialization.Serializable
-
-@Serializable // Not used at the moment, but added here to test compose with kotlinx.serialization compilation
-public class Id(public val id: Applier<String>)
-
-@Composable // Not used at the moment, but added here to test compose with kotlinx.serialization compilation
-fun Abc(id: Id) {
-    println("Id = $id")
-}
 
 @Composable
-fun myContent() {
+internal fun myContent() {
     var tick by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(false) }
     var clutz by remember { mutableStateOf(false) }
@@ -51,12 +40,6 @@ fun myContent() {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
     Column {
-        TextField(
-            value = textFieldState,
-            onValueChange = {
-                textFieldState = it
-            }
-        )
         Box(
             modifier = Modifier
                 .padding(16.dp)
@@ -133,7 +116,12 @@ fun myContent() {
                 Text(textFromClipboard)
             }
         }
-
+        TextField(
+            value = textFieldState,
+            onValueChange = {
+                textFieldState = it
+            }
+        )
     }
     LaunchedEffect(Unit) {
         while (true) {

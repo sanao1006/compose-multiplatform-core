@@ -46,9 +46,26 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
 import cnames.structs.CGContext
+import kotlin.native.internal.NativePtr
 import kotlinx.atomicfu.atomic
+import kotlinx.cinterop.COpaque
+import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.COpaquePointerVar
+import kotlinx.cinterop.CPointed
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.CPointerVarOf
+import kotlinx.cinterop.CValuesRef
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
 import kotlinx.cinterop.cValue
+import kotlinx.cinterop.interpretCPointer
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.nativeHeap
+import kotlinx.cinterop.objcPtr
+import kotlinx.cinterop.pin
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.useContents
 import org.jetbrains.skia.GrBackendTexture
 import org.jetbrains.skia.Image
@@ -71,8 +88,10 @@ import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLPixelFormatRGBA8Unorm
 import platform.Metal.MTLRegionMake2D
+import platform.Metal.MTLResourceStorageModeShared
 import platform.Metal.MTLTextureDescriptor
 import platform.Metal.MTLTextureProtocol
+import platform.Metal.MTLTextureUsageShaderRead
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.CATransform3DConcat
 import platform.QuartzCore.CATransform3DMakeScale
@@ -90,8 +109,11 @@ import platform.UIKit.setContentScaleFactor
 import platform.UIKit.setFrame
 import platform.UIKit.setNeedsDisplay
 import platform.UIKit.setNeedsUpdateConstraints
+import platform.darwin.ByteVar
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
+import platform.posix.getpagesize
+import platform.posix.posix_memalign
 
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()//todo hardcode
@@ -101,25 +123,48 @@ fun UIView.toMtlTexture(): MTLTextureProtocol? {
     return createMetalTexture(this, device)
 }
 
+fun alignUp(size: Int, align: Int): Int {
+//    #if DEBUG //todo
+//    precondition(((align - 1) & align) == 0, "Align must be a power of two")
+//    #endif
+
+    val alignmentMask = align - 1
+
+    return (size + alignmentMask) and alignmentMask.inv()
+}
+
 fun createMetalTexture(uiView: UIView, device: MTLDeviceProtocol): MTLTextureProtocol? {//todo move to skiko
     val (width, height) = uiView.bounds().useContents { size.width to size.height }
+    val pixelFormat = MTLPixelFormatRGBA8Unorm
+    val pixelRowAlignment = device.minimumTextureBufferAlignmentForPixelFormat(pixelFormat)
+    val bytesPerRow = alignUp(size = width.toInt(), align = pixelRowAlignment.toInt()) * 4 // 4 color components
+    val pagesize = getpagesize()
+    val allocationSize = alignUp(size = (bytesPerRow * height).toInt(), align = pagesize)
+
+//    val data = nativeHeap.alloc<COpaquePointerVar>()
+//    val data: CValuesRef<COpaquePointerVar> = interpretCPointer(NativePtr.NULL)!!//ByteArray(0).pin().addressOf(0)
+//    posix_memalign(data.reinterpret(), pagesize.toULong(), allocationSize.toULong())
+
     val context: CPointer<CGContext>? = CGBitmapContextCreate(
-        null,
-        width.toULong(),
-        height.toULong(),
-        8,
-        0,
-        CGColorSpaceCreateDeviceRGB(),
-        CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
+        data = null /*data*/,
+        width = width.toULong(),
+        height = height.toULong(),
+        bitsPerComponent = 8,
+        bytesPerRow = 0 /*bytesPerRow.toULong()*/,
+        space = CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
     )
-    val data = CGBitmapContextGetData(context)
+
+//    context.scaleBy(x: 1.0, y: -1.0)
+//    context.translateBy(x: 0, y: -CGFloat(context.height))
+    val data: CPointer<out CPointed>? = CGBitmapContextGetData(context)
+    val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
+        pixelFormat = pixelFormat,
+        width = width.toULong(),
+        height = height.toULong(),
+        mipmapped = false
+    )
     if (data != null) {
-        val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
-            pixelFormat = MTLPixelFormatRGBA8Unorm,
-            width = width.toULong(),
-            height = height.toULong(),
-            mipmapped = false
-        )
         val texture = device.newTextureWithDescriptor(desc)
         if (texture != null) {
             uiView.layer.renderInContext(context)
@@ -130,6 +175,24 @@ fun createMetalTexture(uiView: UIView, device: MTLDeviceProtocol): MTLTexturePro
                 bytesPerRow = CGBitmapContextGetBytesPerRow(context)
             )
             return texture
+        }
+    } else {
+        uiView.layer.renderInContext(context)
+        val buffer = device.newBufferWithBytesNoCopy(
+            pointer = CGBitmapContextGetData(context),
+            length = allocationSize.toULong(),
+            options = MTLResourceStorageModeShared /*.storageModeShared*/,
+            deallocator = null /*{ pointer, length in free(data) }*/
+        )
+        if(buffer != null) {
+            desc.storageMode = buffer.storageMode
+            // we are only going to read from this texture on GPU side
+            desc.usage = MTLTextureUsageShaderRead
+            return buffer.newTextureWithDescriptor(
+                descriptor = desc,
+                offset= 0,
+                bytesPerRow = CGBitmapContextGetBytesPerRow(context)
+            )
         }
     }
     return null
@@ -174,7 +237,8 @@ public fun <T : UIView> UIKitInteropView(
             withFrameNanos { it }
             val uiView = componentInfo.component
             val size = uiView.bounds().useContents { IntSize((size.width * density).toInt(), (size.height * density).toInt()) }
-            if (size.width != 0 && size.height != 0) {
+            texture = uiView.toMtlTexture()
+            if (false && size.width != 0 && size.height != 0) {
                 if (uiViewSize != size) {
                     uiViewSize = size
                     val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
@@ -186,13 +250,13 @@ public fun <T : UIView> UIKitInteropView(
                     texture = device!!.newTextureWithDescriptor(desc)
                 }
                 val context: CPointer<CGContext>? = CGBitmapContextCreate(
-                    null,
-                    size.width.toULong(),
-                    size.height.toULong(),
-                    8,
-                    0,
-                    CGColorSpaceCreateDeviceRGB(),
-                    CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
+                    data = null,
+                    width = size.width.toULong(),
+                    height = size.height.toULong(),
+                    bitsPerComponent = 8,
+                    bytesPerRow = 0,
+                    space = CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
                 )
                 if (texture != null) {
                     uiView.scale(density)

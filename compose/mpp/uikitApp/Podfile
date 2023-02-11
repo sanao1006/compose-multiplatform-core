@@ -1,0 +1,5 @@
+target 'UIKitDemo' do
+  use_frameworks!
+  platform :ios, '14.1'
+  pod 'demo', :path => '../demo'
+end
