@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
 import cnames.structs.CGContext
+import kotlin.native.concurrent.AtomicNativePtr
 import kotlin.native.internal.NativePtr
 import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.COpaque
@@ -57,6 +58,7 @@ import kotlinx.cinterop.CPointerVarOf
 import kotlinx.cinterop.CValuesRef
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
+import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.cValue
 import kotlinx.cinterop.interpretCPointer
 import kotlinx.cinterop.memScoped
@@ -67,6 +69,7 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.useContents
+import kotlinx.cinterop.value
 import org.jetbrains.skia.GrBackendTexture
 import org.jetbrains.skia.Image
 import org.jetbrains.skiko.SkikoTouchEvent
@@ -141,37 +144,37 @@ fun createMetalTexture(uiView: UIView, device: MTLDeviceProtocol): MTLTexturePro
     val pagesize = getpagesize()
     val allocationSize = alignUp(size = (bytesPerRow * height).toInt(), align = pagesize)
 
-//    val data = nativeHeap.alloc<COpaquePointerVar>()
-//    val data: CValuesRef<COpaquePointerVar> = interpretCPointer(NativePtr.NULL)!!//ByteArray(0).pin().addressOf(0)
-//    posix_memalign(data.reinterpret(), pagesize.toULong(), allocationSize.toULong())
+//    val dataPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
+//    posix_memalign(dataPtr, pagesize.toULong(), allocationSize.toULong())
+    val dataPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
 
     val context: CPointer<CGContext>? = CGBitmapContextCreate(
-        data = null /*data*/,
+        data = dataPtr,
         width = width.toULong(),
         height = height.toULong(),
         bitsPerComponent = 8,
-        bytesPerRow = 0 /*bytesPerRow.toULong()*/,
+        bytesPerRow = bytesPerRow.toULong(),
         space = CGColorSpaceCreateDeviceRGB(),
         bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
     )
 
 //    context.scaleBy(x: 1.0, y: -1.0)
 //    context.translateBy(x: 0, y: -CGFloat(context.height))
-    val data: CPointer<out CPointed>? = CGBitmapContextGetData(context)
+//    val data: CPointer<out CPointed>? = CGBitmapContextGetData(context)
     val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
         pixelFormat = pixelFormat,
         width = width.toULong(),
         height = height.toULong(),
         mipmapped = false
     )
-    if (data != null) {
+    if (false) {
         val texture = device.newTextureWithDescriptor(desc)
         if (texture != null) {
             uiView.layer.renderInContext(context)
             texture.replaceRegion(
                 region = MTLRegionMake2D(0, 0, width.toULong(), height.toULong()),
                 mipmapLevel = 0,
-                withBytes = data,
+                withBytes = CGBitmapContextGetData(context),
                 bytesPerRow = CGBitmapContextGetBytesPerRow(context)
             )
             return texture
