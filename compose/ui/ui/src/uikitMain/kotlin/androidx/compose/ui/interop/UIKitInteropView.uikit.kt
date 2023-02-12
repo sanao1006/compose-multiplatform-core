@@ -128,7 +128,7 @@ import platform.darwin.dispatch_get_main_queue
 import platform.posix.getpagesize
 import platform.posix.posix_memalign
 
-const val ON_SIMULATOR = false
+const val ON_SIMULATOR = true
 /**
  * On simulator available only private storage mode
  * https://developer.apple.com/documentation/metal/developing_metal_apps_that_run_in_simulator?language=objc
@@ -139,6 +139,10 @@ val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
 
 private class Cache(
+    /**
+     * Custom memory space to draw
+     * https://medium.com/@s1ddok/combine-the-power-of-coregraphics-and-metal-by-sharing-resource-memory-eabb4c1be615
+     */
     val textureMemoryPtr: CPointer<UByteVarOf<Byte>>, //todo clear cache
     val context: CPointer<CGContext>,
     val textureRegion: CValue<MTLRegion>,
