@@ -90,61 +90,59 @@ private fun UIKitDemo() {
         Example("UISwitch") {
             UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
         }
-        if(true) {
-            Example("UITextField with shared state") {
-                ComposeUITextField(Modifier.fillMaxWidth().height(50.dp), textState1.value, onValueChange = { textState1.value = it })
-                TextField(value = textState1.value, onValueChange = { textState1.value = it })
-            }
-            Example("WebView") {
-                UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
-                    val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
-                    wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString("https://kotlinlang.org")!!))
-                    wkWebView
-                })
-            }
-            Example("MapView") {
-                UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
-                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                    mapView
-                })
-            }
-            Example("Modifiers") {
-                var alpha by remember { mutableStateOf(1f) }
-                var corner by remember { mutableStateOf(0f) }
-                var rotate by remember { mutableStateOf(0f) }
-                UIKitInteropView(
-                    modifier = Modifier.size(300.dp, 300.dp)
-                        .alpha(alpha)
-                        .clip(RoundedCornerShape(size = corner.dp))
-                        .rotate(rotate),
-                    factory = {
-                        val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                        mapView
-                    })
-                Row {
-                    Text("Alpha")
-                    Slider(alpha, onValueChange = {alpha = it}, Modifier.fillMaxWidth())
-                }
-                Row {
-                    Text("Corner")
-                    Slider(corner, onValueChange = {corner = it}, Modifier.fillMaxWidth(), valueRange = 0f..150f)
-                }
-                Row {
-                    Text("Rotate")
-                    Slider(rotate, onValueChange = {rotate = it}, Modifier.fillMaxWidth(), valueRange = 0f..360f)
-                }
-            }
-            Example("Todo") {
-                Box(Modifier.size(200.dp, 200.dp)) {
-                    UIKitInteropView(modifier = Modifier.fillMaxSize(), factory = {
-                        UISwitch(CGRectMake(0.0, 0.0, 100.0, 100.0))
-                    })
-//                Button(onClick = { counter.value++ }, Modifier.align(Alignment.BottomCenter)) {
-//                    Text("Click ${counter.value}")
-//                }
-                }
-            }
+        Example("UITextField with shared state") {
+            ComposeUITextField(Modifier.fillMaxWidth().height(50.dp), textState1.value, onValueChange = { textState1.value = it })
+            TextField(value = textState1.value, onValueChange = { textState1.value = it })
         }
+        Example("WebView") {
+            UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
+                val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
+                wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString("https://kotlinlang.org")!!))
+                wkWebView
+            })
+        }
+//        Example("MapView") {
+//            UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
+//                val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+//                mapView
+//            })
+//        }
+//        Example("Modifiers") {
+//            var alpha by remember { mutableStateOf(1f) }
+//            var corner by remember { mutableStateOf(0f) }
+//            var rotate by remember { mutableStateOf(0f) }
+//            UIKitInteropView(
+//                modifier = Modifier.size(300.dp, 300.dp)
+//                    .alpha(alpha)
+//                    .clip(RoundedCornerShape(size = corner.dp))
+//                    .rotate(rotate),
+//                factory = {
+//                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+//                    mapView
+//                })
+//            Row {
+//                Text("Alpha")
+//                Slider(alpha, onValueChange = {alpha = it}, Modifier.fillMaxWidth())
+//            }
+//            Row {
+//                Text("Corner")
+//                Slider(corner, onValueChange = {corner = it}, Modifier.fillMaxWidth(), valueRange = 0f..150f)
+//            }
+//            Row {
+//                Text("Rotate")
+//                Slider(rotate, onValueChange = {rotate = it}, Modifier.fillMaxWidth(), valueRange = 0f..360f)
+//            }
+//        }
+//        Example("Todo") {
+//            Box(Modifier.size(200.dp, 200.dp)) {
+//                UIKitInteropView(modifier = Modifier.fillMaxSize(), factory = {
+//                    UISwitch(CGRectMake(0.0, 0.0, 100.0, 100.0))
+//                })
+////                Button(onClick = { counter.value++ }, Modifier.align(Alignment.BottomCenter)) {
+////                    Text("Click ${counter.value}")
+////                }
+//            }
+//        }
         items(10) {
             Stub()
         }

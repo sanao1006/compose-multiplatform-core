@@ -143,7 +143,7 @@ private class Cache(
     val context: CPointer<CGContext>,
     val textureRegion: CValue<MTLRegion>,
     val descriptor: MTLTextureDescriptor,
-    var texture: MTLTextureProtocol? = null,
+    val texture: MTLTextureProtocol,
 )
 
 @Composable
@@ -192,12 +192,18 @@ public fun <T : UIView> UIKitInteropView(
 
                 if (uiViewSize != size) {
                     uiViewSize = size
-                    val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
+                    val descriptor = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
                         pixelFormat = pixelFormat,
                         width = size.width.toULong(),
                         height = size.height.toULong(),
                         mipmapped = false
-                    )
+                    ).apply {
+                        if(!ON_SIMULATOR) {
+                            storageMode = metalResourceStorageMode
+                            // we are only going to read from this texture on GPU side
+                            usage = MTLTextureUsageShaderRead
+                        }
+                    }
                     val textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
                     //val textureMemoryPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
                     //posix_memalign(textureMemoryPtr, pagesize.toULong(), allocationSize.toULong())
@@ -214,46 +220,40 @@ public fun <T : UIView> UIKitInteropView(
                     )
                     CGContextScaleCTM(context, density.toDouble(), density.toDouble())
                     //context.translateBy(x: 0, y: -CGFloat(context.height))
-                    cache = Cache(
-                        textureMemoryPtr,
-                        context!!,
-                        textureRegion,
-                        desc
-                    ).also {
-                        if (ON_SIMULATOR) {
-                            it.texture = device.newTextureWithDescriptor(desc)!!
-                        } else {
-                            it.descriptor.storageMode = metalResourceStorageMode
-                            // we are only going to read from this texture on GPU side
-                            it.descriptor.usage = MTLTextureUsageShaderRead
-                        }
+                    val texture = if (ON_SIMULATOR) {
+                        device.newTextureWithDescriptor(descriptor)
+                    } else {
+                        val buffer = device.newBufferWithBytesNoCopy(
+                            pointer = CGBitmapContextGetData(context),
+                            length = allocationSize.toULong(),
+                            options = metalResourceStorageMode,
+                            deallocator = null /*{ pointer, length in free(data) }*/
+                        )!!
+                        buffer.newTextureWithDescriptor(
+                            descriptor = descriptor,
+                            offset = 0,
+                            bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
+                        )
                     }
+                    cache = Cache(
+                        textureMemoryPtr = textureMemoryPtr,
+                        context = context!!,
+                        textureRegion = textureRegion,
+                        descriptor = descriptor,
+                        texture = texture!!,
+                    )
                 }
                 val cache = cache
                 if (cache != null) {
                     CGContextClearRect(cache.context, componentInfo.container.bounds())
                     componentInfo.container.layer.renderInContext(cache.context)
                     if (ON_SIMULATOR) {
-                        cache.texture?.replaceRegion(
+                        cache.texture.replaceRegion(
                             region = cache.textureRegion,
                             mipmapLevel = 0,
                             withBytes = cache.textureMemoryPtr /*CGBitmapContextGetData(context)*/,
                             bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
                         )
-                    } else {
-                        val buffer = device.newBufferWithBytesNoCopy(
-                            pointer = CGBitmapContextGetData(cache.context),
-                            length = allocationSize.toULong(),
-                            options = metalResourceStorageMode,
-                            deallocator = null /*{ pointer, length in free(data) }*/
-                        )!!
-                        if (cache.texture == null) {
-                            cache.texture = buffer.newTextureWithDescriptor(
-                                descriptor = cache.descriptor,
-                                offset = 0,
-                                bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
-                            )
-                        }
                     }
                 }
             }
