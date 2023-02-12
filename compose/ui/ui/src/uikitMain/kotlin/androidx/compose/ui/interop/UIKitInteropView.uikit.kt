@@ -55,6 +55,7 @@ import kotlinx.cinterop.COpaquePointerVar
 import kotlinx.cinterop.CPointed
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVarOf
+import kotlinx.cinterop.CValue
 import kotlinx.cinterop.CValuesRef
 import kotlinx.cinterop.UByteVarOf
 import kotlinx.cinterop.addressOf
@@ -71,6 +72,7 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.value
+import kotlinx.coroutines.delay
 import org.jetbrains.skia.GrBackendTexture
 import org.jetbrains.skia.Image
 import org.jetbrains.skiko.SkikoTouchEvent
@@ -95,7 +97,9 @@ import platform.Metal.MTLBufferProtocol
 import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLPixelFormatRGBA8Unorm
+import platform.Metal.MTLRegion
 import platform.Metal.MTLRegionMake2D
+import platform.Metal.MTLResourceStorageModePrivate
 import platform.Metal.MTLResourceStorageModeShared
 import platform.Metal.MTLTextureDescriptor
 import platform.Metal.MTLTextureProtocol
@@ -125,6 +129,12 @@ import platform.posix.getpagesize
 import platform.posix.posix_memalign
 
 const val ON_SIMULATOR = true
+/**
+ * On simulator available only private storage mode
+ * https://developer.apple.com/documentation/metal/developing_metal_apps_that_run_in_simulator?language=objc
+ */
+val metalResourceStorageMode =
+    if (ON_SIMULATOR) MTLResourceStorageModePrivate else MTLResourceStorageModeShared
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
 
@@ -148,7 +158,10 @@ public fun <T : UIView> UIKitInteropView(
     val focusSwitcher = remember { FocusSwitcher(componentInfo, focusManager) }
     var rectInPixels by remember { mutableStateOf(IntRect(0, 0, 0, 0)) }
     var uiViewSize by remember { mutableStateOf(IntSize(0, 0)) }
-    var dataPtr: CPointer<UByteVarOf<Byte>>? by remember { mutableStateOf(null) }
+    var textureMemoryPtr: CPointer<UByteVarOf<Byte>>? by remember { mutableStateOf(null) }
+    var context: CPointer<CGContext>? by remember { mutableStateOf(null) }
+    var textureRegion: CValue<MTLRegion>? by remember { mutableStateOf(null) }
+    var desc: MTLTextureDescriptor? by remember { mutableStateOf(null) }
     var texture: MTLTextureProtocol? by remember { mutableStateOf(null) }
     val mtlSkikoImage: Image? = remember(texture) {
         texture?.let {
@@ -173,60 +186,58 @@ public fun <T : UIView> UIKitInteropView(
                 val pagesize = getpagesize()
                 val allocationSize = alignUp(size = bytesPerRow * size.height, align = pagesize)
 
-                val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
-                    pixelFormat = pixelFormat,
-                    width = size.width.toULong(),
-                    height = size.height.toULong(),
-                    mipmapped = false
-                )
                 if (uiViewSize != size) {
                     uiViewSize = size
+                    desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
+                        pixelFormat = pixelFormat,
+                        width = size.width.toULong(),
+                        height = size.height.toULong(),
+                        mipmapped = false
+                    )
                     if (ON_SIMULATOR) {
-                        texture = device.newTextureWithDescriptor(desc)!!
+                        texture = device.newTextureWithDescriptor(desc!!)!!
+                    } else {
+                        desc!!.storageMode = metalResourceStorageMode
+                        // we are only going to read from this texture on GPU side
+                        desc!!.usage = MTLTextureUsageShaderRead
                     }
-                    dataPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
-                    println("change dataPtr, allocationSize: $allocationSize")
+                    textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
+                    //val textureMemoryPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
+                    //posix_memalign(textureMemoryPtr, pagesize.toULong(), allocationSize.toULong())
+                    //val textureMemoryPtr: CPointer<UByteVarOf<Byte>> = nativeHeap.allocArray<ByteVar>(allocationSize)
+                    textureRegion = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong())
+                    context = CGBitmapContextCreate(
+                        data = textureMemoryPtr,
+                        width = size.width.toULong(),
+                        height = size.height.toULong(),
+                        bitsPerComponent = 8,
+                        bytesPerRow = bytesPerRow.toULong(),
+                        space = CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo = if (useAlphaComponent) CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value else CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value
+                    )
+                    CGContextScaleCTM(context, density.toDouble(), density.toDouble())
+                    //context.translateBy(x: 0, y: -CGFloat(context.height))
                 }
-                //val dataPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
-                //posix_memalign(dataPtr, pagesize.toULong(), allocationSize.toULong())
-                //val dataPtr: CPointer<UByteVarOf<Byte>> = nativeHeap.allocArray<ByteVar>(allocationSize)
-                val context: CPointer<CGContext>? = CGBitmapContextCreate(
-                    data = dataPtr,
-                    width = size.width.toULong(),
-                    height = size.height.toULong(),
-                    bitsPerComponent = 8,
-                    bytesPerRow = bytesPerRow.toULong(),
-                    space = CGColorSpaceCreateDeviceRGB(),
-                    bitmapInfo = if (useAlphaComponent) CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value else CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value
-                )
-                CGContextScaleCTM(context, density.toDouble(), density.toDouble())
                 CGContextClearRect(context, componentInfo.container.bounds())
-                //context.translateBy(x: 0, y: -CGFloat(context.height))
-                //val data: CPointer<out CPointed>? = CGBitmapContextGetData(context)
-                //uiView.scale(density)
                 componentInfo.container.layer.renderInContext(context)
-                //uiView.scale(1f)
                 if (ON_SIMULATOR) {
                     texture!!.replaceRegion(
-                        region = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong()),
+                        region = textureRegion!!,
                         mipmapLevel = 0,
-                        withBytes = CGBitmapContextGetData(context),
-                        bytesPerRow = CGBitmapContextGetBytesPerRow(context)
+                        withBytes = textureMemoryPtr /*CGBitmapContextGetData(context)*/,
+                        bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
                     )
                 } else {
                     val buffer = device.newBufferWithBytesNoCopy(
                         pointer = CGBitmapContextGetData(context),
                         length = allocationSize.toULong(),
-                        options = MTLResourceStorageModeShared /*.storageModeShared*/,
+                        options = metalResourceStorageMode,
                         deallocator = null /*{ pointer, length in free(data) }*/
                     )!!
-                    desc.storageMode = buffer.storageMode
-                    // we are only going to read from this texture on GPU side
-                    desc.usage = MTLTextureUsageShaderRead
                     texture = buffer.newTextureWithDescriptor(
-                        descriptor = desc,
+                        descriptor = desc!!,
                         offset= 0,
-                        bytesPerRow = CGBitmapContextGetBytesPerRow(context)
+                        bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
                     )
                 }
             }
@@ -347,7 +358,7 @@ public fun <T : UIView> UIKitInteropView(
         }
     }
     SideEffect {
-        if(!useMetalTexture) {
+        if (!useMetalTexture) {
             componentInfo.container.backgroundColor = parseColor(background)
         }
         componentInfo.updater.update = update

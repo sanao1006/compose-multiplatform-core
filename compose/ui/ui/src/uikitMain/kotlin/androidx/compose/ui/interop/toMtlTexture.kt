@@ -131,12 +131,8 @@ fun UIView.toMtlTexture(): MTLTextureProtocol? {
 }
 
 fun alignUp(size: Int, align: Int): Int {
-//    #if DEBUG //todo
-//    precondition(((align - 1) & align) == 0, "Align must be a power of two")
-//    #endif
-
+    require((align - 1) and align == 0) //Align must be a power of two
     val alignmentMask = align - 1
-
     return (size + alignmentMask) and alignmentMask.inv()
 }
 
