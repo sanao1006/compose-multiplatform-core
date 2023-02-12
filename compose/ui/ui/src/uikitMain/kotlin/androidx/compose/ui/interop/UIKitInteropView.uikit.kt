@@ -138,6 +138,13 @@ val metalResourceStorageMode =
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
 
+private class Cache(
+    val textureMemoryPtr: CPointer<UByteVarOf<Byte>>, //todo clear cache
+    val context: CPointer<CGContext>,
+    val textureRegion: CValue<MTLRegion>,
+    val descriptor: MTLTextureDescriptor,
+)
+
 @Composable
 public fun <T : UIView> UIKitInteropView(
     background: Color = Color.White,
@@ -158,10 +165,7 @@ public fun <T : UIView> UIKitInteropView(
     val focusSwitcher = remember { FocusSwitcher(componentInfo, focusManager) }
     var rectInPixels by remember { mutableStateOf(IntRect(0, 0, 0, 0)) }
     var uiViewSize by remember { mutableStateOf(IntSize(0, 0)) }
-    var textureMemoryPtr: CPointer<UByteVarOf<Byte>>? by remember { mutableStateOf(null) }
-    var context: CPointer<CGContext>? by remember { mutableStateOf(null) }
-    var textureRegion: CValue<MTLRegion>? by remember { mutableStateOf(null) }
-    var desc: MTLTextureDescriptor? by remember { mutableStateOf(null) }
+    var cache: Cache? by remember { mutableStateOf(null) }
     var texture: MTLTextureProtocol? by remember { mutableStateOf(null) }
     val mtlSkikoImage: Image? = remember(texture) {
         texture?.let {
@@ -188,25 +192,25 @@ public fun <T : UIView> UIKitInteropView(
 
                 if (uiViewSize != size) {
                     uiViewSize = size
-                    desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
+                    val desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
                         pixelFormat = pixelFormat,
                         width = size.width.toULong(),
                         height = size.height.toULong(),
                         mipmapped = false
                     )
                     if (ON_SIMULATOR) {
-                        texture = device.newTextureWithDescriptor(desc!!)!!
+                        texture = device.newTextureWithDescriptor(desc)!!
                     } else {
-                        desc!!.storageMode = metalResourceStorageMode
+                        desc.storageMode = metalResourceStorageMode
                         // we are only going to read from this texture on GPU side
-                        desc!!.usage = MTLTextureUsageShaderRead
+                        desc.usage = MTLTextureUsageShaderRead
                     }
-                    textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
+                    val textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
                     //val textureMemoryPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
                     //posix_memalign(textureMemoryPtr, pagesize.toULong(), allocationSize.toULong())
                     //val textureMemoryPtr: CPointer<UByteVarOf<Byte>> = nativeHeap.allocArray<ByteVar>(allocationSize)
-                    textureRegion = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong())
-                    context = CGBitmapContextCreate(
+                    val textureRegion = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong())
+                    val context = CGBitmapContextCreate(
                         data = textureMemoryPtr,
                         width = size.width.toULong(),
                         height = size.height.toULong(),
@@ -217,28 +221,38 @@ public fun <T : UIView> UIKitInteropView(
                     )
                     CGContextScaleCTM(context, density.toDouble(), density.toDouble())
                     //context.translateBy(x: 0, y: -CGFloat(context.height))
+
+                    cache = Cache(
+                        textureMemoryPtr,
+                        context!!,
+                        textureRegion,
+                        desc
+                    )
                 }
-                CGContextClearRect(context, componentInfo.container.bounds())
-                componentInfo.container.layer.renderInContext(context)
-                if (ON_SIMULATOR) {
-                    texture!!.replaceRegion(
-                        region = textureRegion!!,
-                        mipmapLevel = 0,
-                        withBytes = textureMemoryPtr /*CGBitmapContextGetData(context)*/,
-                        bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
-                    )
-                } else {
-                    val buffer = device.newBufferWithBytesNoCopy(
-                        pointer = CGBitmapContextGetData(context),
-                        length = allocationSize.toULong(),
-                        options = metalResourceStorageMode,
-                        deallocator = null /*{ pointer, length in free(data) }*/
-                    )!!
-                    texture = buffer.newTextureWithDescriptor(
-                        descriptor = desc!!,
-                        offset= 0,
-                        bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
-                    )
+                val cache = cache
+                if (cache != null) {
+                    CGContextClearRect(cache.context, componentInfo.container.bounds())
+                    componentInfo.container.layer.renderInContext(cache.context)
+                    if (ON_SIMULATOR) {
+                        texture!!.replaceRegion(
+                            region = cache.textureRegion,
+                            mipmapLevel = 0,
+                            withBytes = cache.textureMemoryPtr /*CGBitmapContextGetData(context)*/,
+                            bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
+                        )
+                    } else {
+                        val buffer = device.newBufferWithBytesNoCopy(
+                            pointer = CGBitmapContextGetData(cache.context),
+                            length = allocationSize.toULong(),
+                            options = metalResourceStorageMode,
+                            deallocator = null /*{ pointer, length in free(data) }*/
+                        )!!
+                        texture = buffer.newTextureWithDescriptor(
+                            descriptor = cache.descriptor,
+                            offset = 0,
+                            bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
+                        )
+                    }
                 }
             }
         }
