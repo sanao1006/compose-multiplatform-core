@@ -90,7 +90,7 @@ private fun UIKitDemo() {
         Example("UISwitch") {
             UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
         }
-        if(false) {
+        if(true) {
             Example("UITextField with shared state") {
                 ComposeUITextField(Modifier.fillMaxWidth().height(50.dp), textState1.value, onValueChange = { textState1.value = it })
                 TextField(value = textState1.value, onValueChange = { textState1.value = it })
