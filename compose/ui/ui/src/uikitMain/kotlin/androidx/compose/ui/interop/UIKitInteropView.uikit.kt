@@ -128,7 +128,7 @@ import platform.darwin.dispatch_get_main_queue
 import platform.posix.getpagesize
 import platform.posix.posix_memalign
 
-const val ON_SIMULATOR = true
+const val ON_SIMULATOR = false
 /**
  * On simulator available only private storage mode
  * https://developer.apple.com/documentation/metal/developing_metal_apps_that_run_in_simulator?language=objc
@@ -143,6 +143,7 @@ private class Cache(
     val context: CPointer<CGContext>,
     val textureRegion: CValue<MTLRegion>,
     val descriptor: MTLTextureDescriptor,
+    var texture: MTLTextureProtocol? = null,
 )
 
 @Composable
@@ -166,9 +167,8 @@ public fun <T : UIView> UIKitInteropView(
     var rectInPixels by remember { mutableStateOf(IntRect(0, 0, 0, 0)) }
     var uiViewSize by remember { mutableStateOf(IntSize(0, 0)) }
     var cache: Cache? by remember { mutableStateOf(null) }
-    var texture: MTLTextureProtocol? by remember { mutableStateOf(null) }
-    val mtlSkikoImage: Image? = remember(texture) {
-        texture?.let {
+    val mtlSkikoImage: Image? = remember(cache?.texture) {
+        cache?.texture?.let {
             val skikoBackendTexture = GrBackendTexture.Companion.createFromMetalTexture(
                 mtlTexture = it,
                 width = it.width.toInt(),
@@ -198,13 +198,6 @@ public fun <T : UIView> UIKitInteropView(
                         height = size.height.toULong(),
                         mipmapped = false
                     )
-                    if (ON_SIMULATOR) {
-                        texture = device.newTextureWithDescriptor(desc)!!
-                    } else {
-                        desc.storageMode = metalResourceStorageMode
-                        // we are only going to read from this texture on GPU side
-                        desc.usage = MTLTextureUsageShaderRead
-                    }
                     val textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
                     //val textureMemoryPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
                     //posix_memalign(textureMemoryPtr, pagesize.toULong(), allocationSize.toULong())
@@ -221,20 +214,27 @@ public fun <T : UIView> UIKitInteropView(
                     )
                     CGContextScaleCTM(context, density.toDouble(), density.toDouble())
                     //context.translateBy(x: 0, y: -CGFloat(context.height))
-
                     cache = Cache(
                         textureMemoryPtr,
                         context!!,
                         textureRegion,
                         desc
-                    )
+                    ).also {
+                        if (ON_SIMULATOR) {
+                            it.texture = device.newTextureWithDescriptor(desc)!!
+                        } else {
+                            it.descriptor.storageMode = metalResourceStorageMode
+                            // we are only going to read from this texture on GPU side
+                            it.descriptor.usage = MTLTextureUsageShaderRead
+                        }
+                    }
                 }
                 val cache = cache
                 if (cache != null) {
                     CGContextClearRect(cache.context, componentInfo.container.bounds())
                     componentInfo.container.layer.renderInContext(cache.context)
                     if (ON_SIMULATOR) {
-                        texture!!.replaceRegion(
+                        cache.texture?.replaceRegion(
                             region = cache.textureRegion,
                             mipmapLevel = 0,
                             withBytes = cache.textureMemoryPtr /*CGBitmapContextGetData(context)*/,
@@ -247,11 +247,13 @@ public fun <T : UIView> UIKitInteropView(
                             options = metalResourceStorageMode,
                             deallocator = null /*{ pointer, length in free(data) }*/
                         )!!
-                        texture = buffer.newTextureWithDescriptor(
-                            descriptor = cache.descriptor,
-                            offset = 0,
-                            bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
-                        )
+                        if (cache.texture == null) {
+                            cache.texture = buffer.newTextureWithDescriptor(
+                                descriptor = cache.descriptor,
+                                offset = 0,
+                                bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
+                            )
+                        }
                     }
                 }
             }
