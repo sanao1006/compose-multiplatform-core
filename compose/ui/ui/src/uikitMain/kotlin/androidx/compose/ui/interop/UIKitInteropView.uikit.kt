@@ -112,10 +112,15 @@ import platform.QuartzCore.CATransform3DMakeScale
 import platform.QuartzCore.CATransform3DMakeTranslation
 import platform.UIKit.UIColor
 import platform.UIKit.UIEvent
+import platform.UIKit.UIGraphicsBeginImageContext
+import platform.UIKit.UIGraphicsEndImageContext
+import platform.UIKit.UIGraphicsPopContext
+import platform.UIKit.UIGraphicsPushContext
 import platform.UIKit.UITouch
 import platform.UIKit.UIView
 import platform.UIKit.addSubview
 import platform.UIKit.backgroundColor
+import platform.UIKit.drawViewHierarchyInRect
 import platform.UIKit.insertSubview
 import platform.UIKit.layoutIfNeeded
 import platform.UIKit.removeFromSuperview
@@ -123,6 +128,7 @@ import platform.UIKit.setContentScaleFactor
 import platform.UIKit.setFrame
 import platform.UIKit.setNeedsDisplay
 import platform.UIKit.setNeedsUpdateConstraints
+import platform.UIKit.snapshotViewAfterScreenUpdates
 import platform.darwin.Byte
 import platform.darwin.ByteVar
 import platform.darwin.dispatch_async
@@ -186,7 +192,7 @@ public fun <T : UIView> UIKitInteropView(
     LaunchedEffect(Unit) {
         while (true) {
             withFrameNanos { it }
-            withContext(Dispatchers.Default) {
+            withContext2(Dispatchers.Default) {
                 val uiView = componentInfo.component
                 val size = uiView.bounds().useContents { IntSize((size.width * density).toInt(), (size.height * density).toInt()) }
                 if (size.width != 0 && size.height != 0) {
@@ -252,7 +258,19 @@ public fun <T : UIView> UIKitInteropView(
                     val cache = cache
                     if (cache != null) {
                         CGContextClearRect(cache.context, componentInfo.container.bounds())
-                        componentInfo.container.layer.renderInContext(cache.context)
+                        if (true) {
+                            //UIGraphicsBeginImageContext()
+                            UIGraphicsPushContext(cache.context)
+                            componentInfo.container.drawViewHierarchyInRect(
+                                rect = componentInfo.container.bounds(),
+                                afterScreenUpdates = false // todo warning in console
+                            )
+                            UIGraphicsPopContext()
+                            //UIGraphicsEndImageContext()
+                        } else {
+                            componentInfo.container.layer.renderInContext(cache.context)
+                        }
+//                        println("componentInfo.container.layer.contents: ${componentInfo.container.layer.contents}")
                         if (ON_SIMULATOR) {
                             cache.texture.replaceRegion(
                                 region = cache.textureRegion,
@@ -341,13 +359,15 @@ public fun <T : UIView> UIKitInteropView(
             }
 
             private fun sendTouchEventToSkikoView(touches: Set<*>, kind: SkikoTouchEventKind) {
-                val events: Array<SkikoTouchEvent> = touches.map {
-                    val event = it as UITouch
-                    val (x, y) = event.locationInView(null).useContents { x to y }
-                    val timestamp = (event.timestamp * 1_000).toLong()
-                    SkikoTouchEvent(x, y, kind, timestamp, event)
-                }.toTypedArray()
-                skikoTouchEventHandler(events)
+                if (false) { //todo handle touches on container?
+                    val events: Array<SkikoTouchEvent> = touches.map {
+                        val event = it as UITouch
+                        val (x, y) = event.locationInView(null).useContents { x to y }
+                        val timestamp = (event.timestamp * 1_000).toLong()
+                        SkikoTouchEvent(x, y, kind, timestamp, event)
+                    }.toTypedArray()
+                    skikoTouchEventHandler(events)
+                }
             }
         }.apply {
 //            layout = BorderLayout(0, 0)
@@ -369,6 +389,7 @@ public fun <T : UIView> UIKitInteropView(
 //                }
 //            }
 //            isFocusCycleRoot = true
+//            this.layer.setShouldRasterize(true)
             addSubview(componentInfo.component)
         }
         componentInfo.updater = Updater(componentInfo.component, update)
@@ -386,6 +407,10 @@ public fun <T : UIView> UIKitInteropView(
         }
         componentInfo.updater.update = update
     }
+}
+
+inline fun withContext2(dispatcher: Any, function: () -> Unit) {
+    function()
 }
 
 private class FocusSwitcher<T : UIView>(

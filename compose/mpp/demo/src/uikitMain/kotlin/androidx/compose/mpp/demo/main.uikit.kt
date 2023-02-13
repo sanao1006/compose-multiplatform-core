@@ -101,48 +101,48 @@ private fun UIKitDemo() {
                 wkWebView
             })
         }
-//        Example("MapView") {
-//            UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
-//                val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-//                mapView
-//            })
-//        }
-//        Example("Modifiers") {
-//            var alpha by remember { mutableStateOf(1f) }
-//            var corner by remember { mutableStateOf(0f) }
-//            var rotate by remember { mutableStateOf(0f) }
-//            UIKitInteropView(
-//                modifier = Modifier.size(300.dp, 300.dp)
-//                    .alpha(alpha)
-//                    .clip(RoundedCornerShape(size = corner.dp))
-//                    .rotate(rotate),
-//                factory = {
-//                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-//                    mapView
-//                })
-//            Row {
-//                Text("Alpha")
-//                Slider(alpha, onValueChange = {alpha = it}, Modifier.fillMaxWidth())
-//            }
-//            Row {
-//                Text("Corner")
-//                Slider(corner, onValueChange = {corner = it}, Modifier.fillMaxWidth(), valueRange = 0f..150f)
-//            }
-//            Row {
-//                Text("Rotate")
-//                Slider(rotate, onValueChange = {rotate = it}, Modifier.fillMaxWidth(), valueRange = 0f..360f)
-//            }
-//        }
-//        Example("Todo") {
-//            Box(Modifier.size(200.dp, 200.dp)) {
-//                UIKitInteropView(modifier = Modifier.fillMaxSize(), factory = {
-//                    UISwitch(CGRectMake(0.0, 0.0, 100.0, 100.0))
-//                })
-////                Button(onClick = { counter.value++ }, Modifier.align(Alignment.BottomCenter)) {
-////                    Text("Click ${counter.value}")
-////                }
-//            }
-//        }
+        Example("MapView") {
+            UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
+                val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+                mapView
+            })
+        }
+        Example("Modifiers") {
+            var alpha by remember { mutableStateOf(1f) }
+            var corner by remember { mutableStateOf(0f) }
+            var rotate by remember { mutableStateOf(0f) }
+            UIKitInteropView(
+                modifier = Modifier.size(300.dp, 300.dp)
+                    .alpha(alpha)
+                    .clip(RoundedCornerShape(size = corner.dp))
+                    .rotate(rotate),
+                factory = {
+                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+                    mapView
+                })
+            Row {
+                Text("Alpha")
+                Slider(alpha, onValueChange = {alpha = it}, Modifier.fillMaxWidth())
+            }
+            Row {
+                Text("Corner")
+                Slider(corner, onValueChange = {corner = it}, Modifier.fillMaxWidth(), valueRange = 0f..150f)
+            }
+            Row {
+                Text("Rotate")
+                Slider(rotate, onValueChange = {rotate = it}, Modifier.fillMaxWidth(), valueRange = 0f..360f)
+            }
+        }
+        Example("Todo") {
+            Box(Modifier.size(200.dp, 200.dp)) {
+                UIKitInteropView(modifier = Modifier.fillMaxSize(), factory = {
+                    UISwitch(CGRectMake(0.0, 0.0, 100.0, 100.0))
+                })
+//                Button(onClick = { counter.value++ }, Modifier.align(Alignment.BottomCenter)) {
+//                    Text("Click ${counter.value}")
+//                }
+            }
+        }
         items(10) {
             Stub()
         }
