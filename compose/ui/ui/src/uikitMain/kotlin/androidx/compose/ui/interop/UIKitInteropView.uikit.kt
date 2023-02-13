@@ -167,6 +167,7 @@ public fun <T : UIView> UIKitInteropView(
     dispose: (T) -> Unit = {},
     useMetalTexture: Boolean = true,
     useAlphaComponent: Boolean = true,
+    drawViewHierarchyInRect: Boolean = true,
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
 
@@ -192,7 +193,7 @@ public fun <T : UIView> UIKitInteropView(
     LaunchedEffect(Unit) {
         while (true) {
             withFrameNanos { it }
-            withContext2(Dispatchers.Default) {
+            withContext(Dispatchers.Default) {
                 val uiView = componentInfo.component
                 val size = uiView.bounds().useContents { IntSize((size.width * density).toInt(), (size.height * density).toInt()) }
                 if (size.width != 0 && size.height != 0) {
@@ -258,7 +259,7 @@ public fun <T : UIView> UIKitInteropView(
                     val cache = cache
                     if (cache != null) {
                         CGContextClearRect(cache.context, componentInfo.container.bounds())
-                        if (true) {
+                        if (drawViewHierarchyInRect) {
                             //UIGraphicsBeginImageContext()
                             UIGraphicsPushContext(cache.context)
                             componentInfo.container.drawViewHierarchyInRect(
@@ -370,27 +371,9 @@ public fun <T : UIView> UIKitInteropView(
                 }
             }
         }.apply {
-//            layout = BorderLayout(0, 0)
-//            focusTraversalPolicy = object : LayoutFocusTraversalPolicy() {
-//                override fun getComponentAfter(aContainer: Container?, aComponent: Component?): Component? {
-//                    return if (aComponent == getLastComponent(aContainer)) {
-//                        root
-//                    } else {
-//                        super.getComponentAfter(aContainer, aComponent)
-//                    }
-//                }
-//
-//                override fun getComponentBefore(aContainer: Container?, aComponent: Component?): Component? {
-//                    return if (aComponent == getFirstComponent(aContainer)) {
-//                        root
-//                    } else {
-//                        super.getComponentBefore(aContainer, aComponent)
-//                    }
-//                }
-//            }
-//            isFocusCycleRoot = true
-//            this.layer.setShouldRasterize(true)
+            layer.setShouldRasterize(true)
             addSubview(componentInfo.component)
+            //todo like in Desktop focusTraversalPolicy = object : LayoutFocusTraversalPolicy() {
         }
         componentInfo.updater = Updater(componentInfo.component, update)
         root.insertSubview(componentInfo.container, 0)
