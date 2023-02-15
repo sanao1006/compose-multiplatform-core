@@ -99,11 +99,17 @@ private fun UIKitDemo() {
                         onValueChange = { textState1.value = it })
                     TextField(value = textState1.value, onValueChange = { textState1.value = it })
                 }
-                Example("WebView") {
-                    UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
-                        val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
-                        wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString("https://kotlinlang.org")!!))
-                        wkWebView
+//                Example("WebView") {
+//                    UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
+//                        val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
+//                        wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString("https://kotlinlang.org")!!))
+//                        wkWebView
+//                    })
+//                }
+                Example("MapView") {
+                    UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
+                        val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+                        mapView
                     })
                 }
                 Example("MapView") {

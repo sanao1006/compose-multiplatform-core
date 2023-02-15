@@ -162,10 +162,10 @@ public fun <T : UIView> UIKitInteropView(
     modifier: Modifier = Modifier,
     update: (T) -> Unit = NoOpUpdate,
     dispose: (T) -> Unit = {},
-    useMetalTexture: Boolean = false,
+    useMetalTexture: Boolean = true,
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
-    useRasterization: Boolean = false,//rasterization memory leak
+    useRasterization: Boolean = true,
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
 
