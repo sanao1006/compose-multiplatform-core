@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
 import cnames.structs.CGContext
+import kotlin.coroutines.CoroutineContext
 import kotlin.native.concurrent.AtomicNativePtr
 import kotlin.native.internal.NativePtr
 import kotlinx.atomicfu.atomic
@@ -62,6 +63,7 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.cValue
+import kotlinx.cinterop.free
 import kotlinx.cinterop.interpretCPointer
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.nativeHeap
@@ -73,7 +75,10 @@ import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.value
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.GrBackendTexture
 import org.jetbrains.skia.Image
@@ -164,6 +169,7 @@ public fun <T : UIView> UIKitInteropView(
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
 
+    val textureThreadContext = remember { newSingleThreadContext("texture") }
     val root = LocalLayerContainer.current
     val skikoTouchEventHandler = SkikoTouchEventHandler.current
     val density = LocalDensity.current.density
@@ -186,7 +192,7 @@ public fun <T : UIView> UIKitInteropView(
     LaunchedEffect(Unit) {
         while (useMetalTexture) {
             withFrameNanos { it }
-            withContext(Dispatchers.Default) {
+            withContext(textureThreadContext) {
                 val uiView = componentInfo.component
                 val size = uiView.bounds().useContents { IntSize((size.width * density + 0.5).toInt(), (size.height * density + 0.5).toInt()) }
                 if (size.width != 0 && size.height != 0) {
@@ -225,7 +231,6 @@ public fun <T : UIView> UIKitInteropView(
                             bitmapInfo = if (useAlphaComponent) CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value else CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value
                         )
                         CGContextScaleCTM(context, density.toDouble(), density.toDouble())
-                        //context.translateBy(x: 0, y: -CGFloat(context.height))
                         val texture = if (ON_SIMULATOR) {
                             device.newTextureWithDescriptor(descriptor)
                         } else {
@@ -248,7 +253,6 @@ public fun <T : UIView> UIKitInteropView(
                             descriptor = descriptor,
                             texture = texture!!,
                         )
-                        println("create new cache, size: $size")
                     }
                     val cache = cache
                     if (cache != null) {
@@ -375,6 +379,9 @@ public fun <T : UIView> UIKitInteropView(
         componentInfo.updater = Updater(componentInfo.component, update)
         root.insertSubview(componentInfo.container, 0)
         onDispose {
+            val c = cache
+            cache = null
+            c?.clear(textureThreadContext)
             componentInfo.container.removeFromSuperview()
             componentInfo.updater.dispose()
             dispose(componentInfo.component)
@@ -553,9 +560,21 @@ private class Cache(
      * Custom memory space to draw
      * https://medium.com/@s1ddok/combine-the-power-of-coregraphics-and-metal-by-sharing-resource-memory-eabb4c1be615
      */
-    val textureMemoryPtr: CPointer<UByteVarOf<Byte>>, //todo clear cache
+    val textureMemoryPtr: CPointer<UByteVarOf<Byte>>,
     val context: CPointer<CGContext>,
     val textureRegion: CValue<MTLRegion>,
     val descriptor: MTLTextureDescriptor,
     val texture: MTLTextureProtocol,
-)
+) {
+    init {
+        println("create new cache, size: ${texture.width} x ${texture.height}")
+    }
+    fun clear(context: CoroutineContext) {
+        println("clear cache, size: ${texture.width} x ${texture.height}")
+        GlobalScope.launch {
+            withContext(context) {
+                nativeHeap.free(textureMemoryPtr)
+            }
+        }
+    }
+}

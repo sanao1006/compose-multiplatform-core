@@ -303,7 +303,7 @@ internal actual class ComposeWindow : UIViewController {
 
     override fun didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
-        TODO("didReceiveMemoryWarning, maybe memory leak")
+        error("didReceiveMemoryWarning, maybe memory leak")
     }
 
     actual fun setContent(
