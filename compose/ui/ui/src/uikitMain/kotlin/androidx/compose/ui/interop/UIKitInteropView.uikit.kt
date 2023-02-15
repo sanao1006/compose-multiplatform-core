@@ -162,10 +162,10 @@ public fun <T : UIView> UIKitInteropView(
     modifier: Modifier = Modifier,
     update: (T) -> Unit = NoOpUpdate,
     dispose: (T) -> Unit = {},
-    useMetalTexture: Boolean = true,
+    useMetalTexture: Boolean = false,
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
-    useRasterization: Boolean = false,
+    useRasterization: Boolean = false,//rasterization memory leak
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
 
@@ -400,6 +400,7 @@ inline fun withContext2(dispatcher: Any, function: () -> Unit) {
     function()
 }
 
+//<editor-fold desc="FocusSwitcher">
 private class FocusSwitcher<T : UIView>(
     private val info: ComponentInfo<T>,
     private val focusManager: FocusManager
@@ -466,6 +467,7 @@ private class FocusSwitcher<T : UIView>(
         )
     }
 }
+//</editor-fold>
 
 @Composable
 private fun Box(modifier: Modifier, content: @Composable () -> Unit = {}) {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -83,70 +84,93 @@ private fun UIKitDemo() {
             Text("Popup")
         }
     }
-    LazyColumn {
-        items(6) {
-            Stub()
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UITextField with shared state") {
-            ComposeUITextField(Modifier.fillMaxWidth().height(50.dp), textState1.value, onValueChange = { textState1.value = it })
-            TextField(value = textState1.value, onValueChange = { textState1.value = it })
-        }
-        Example("WebView") {
-            UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
-                val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
-                wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString("https://kotlinlang.org")!!))
-                wkWebView
-            })
-        }
-        Example("MapView") {
-            UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
-                val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                mapView
-            })
-        }
-        Example("Modifiers") {
-            var alpha by remember { mutableStateOf(1f) }
-            var corner by remember { mutableStateOf(0f) }
-            var rotate by remember { mutableStateOf(0f) }
-            UIKitInteropView(
-                modifier = Modifier.size(300.dp, 300.dp)
-                    .alpha(alpha)
-                    .clip(RoundedCornerShape(size = corner.dp))
-                    .rotate(rotate),
-                factory = {
-                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                    mapView
-                })
-            Row {
-                Text("Alpha")
-                Slider(alpha, onValueChange = {alpha = it}, Modifier.fillMaxWidth())
-            }
-            Row {
-                Text("Corner")
-                Slider(corner, onValueChange = {corner = it}, Modifier.fillMaxWidth(), valueRange = 0f..150f)
-            }
-            Row {
-                Text("Rotate")
-                Slider(rotate, onValueChange = {rotate = it}, Modifier.fillMaxWidth(), valueRange = 0f..360f)
-            }
-        }
-        Example("Todo") {
-            Box(Modifier.size(200.dp, 200.dp)) {
-                UIKitInteropView(modifier = Modifier.fillMaxSize(), factory = {
-                    UISwitch(CGRectMake(0.0, 0.0, 100.0, 100.0))
-                })
+    LazyColumn(Modifier.background(Color.LightGray)) {
+        item {
+            Column {
+                Example("UISwitch") {
+                    UIKitInteropView(
+                        modifier = Modifier.size(70.dp, 50.dp),
+                        factory = { UISwitch() })
+                }
+                Example("UITextField with shared state") {
+                    ComposeUITextField(
+                        Modifier.fillMaxWidth().height(50.dp),
+                        textState1.value,
+                        onValueChange = { textState1.value = it })
+                    TextField(value = textState1.value, onValueChange = { textState1.value = it })
+                }
+                Example("WebView") {
+                    UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
+                        val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
+                        wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString("https://kotlinlang.org")!!))
+                        wkWebView
+                    })
+                }
+                Example("MapView") {
+                    UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
+                        val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+                        mapView
+                    })
+                }
+                Example("Modifiers") {
+                    var alpha by remember { mutableStateOf(1f) }
+                    var corner by remember { mutableStateOf(0f) }
+                    var rotate by remember { mutableStateOf(0f) }
+                    UIKitInteropView(
+                        modifier = Modifier.size(300.dp, 300.dp)
+                            .alpha(alpha)
+                            .clip(RoundedCornerShape(size = corner.dp))
+                            .rotate(rotate),
+                        factory = {
+                            val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
+                            mapView
+                        })
+                    Row {
+                        Text("Alpha")
+                        Slider(alpha, onValueChange = { alpha = it }, Modifier.fillMaxWidth())
+                    }
+                    Row {
+                        Text("Corner")
+                        Slider(
+                            corner,
+                            onValueChange = { corner = it },
+                            Modifier.fillMaxWidth(),
+                            valueRange = 0f..150f
+                        )
+                    }
+                    Row {
+                        Text("Rotate")
+                        Slider(
+                            rotate,
+                            onValueChange = { rotate = it },
+                            Modifier.fillMaxWidth(),
+                            valueRange = 0f..360f
+                        )
+                    }
+                }
+                Example("Todo") {
+                    Box(Modifier.size(200.dp, 200.dp)) {
+                        UIKitInteropView(modifier = Modifier.fillMaxSize(), factory = {
+                            UISwitch(CGRectMake(0.0, 0.0, 100.0, 100.0))
+                        })
 //                Button(onClick = { counter.value++ }, Modifier.align(Alignment.BottomCenter)) {
 //                    Text("Click ${counter.value}")
 //                }
+                    }
+                }
             }
         }
-        items(10) {
-            Stub()
-        }
     }
+}
+
+@Composable
+internal fun ColumnScope.Example(title: String, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().border(width = 1.dp, color = Color.Black).padding(10.dp)) {
+        Text(title)
+        Spacer(Modifier.size(10.dp))
+        content()
+    }
+    Stub()
 }
 
 internal fun LazyListScope.Example(title: String, content: @Composable () -> Unit) {
