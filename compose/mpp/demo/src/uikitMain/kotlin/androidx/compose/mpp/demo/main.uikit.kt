@@ -94,36 +94,6 @@ private fun UIKitDemo() {
             ComposeUITextField(Modifier.fillMaxWidth().height(50.dp), textState1.value, onValueChange = { textState1.value = it })
             TextField(value = textState1.value, onValueChange = { textState1.value = it })
         }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
-        Example("UISwitch") {
-            UIKitInteropView(modifier = Modifier.size(70.dp, 50.dp), factory = { UISwitch() })
-        }
         Example("WebView") {
             UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
                 val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))

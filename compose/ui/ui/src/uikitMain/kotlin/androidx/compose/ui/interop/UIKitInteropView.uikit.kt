@@ -95,6 +95,7 @@ import platform.CoreGraphics.CGImageAlphaInfo
 import platform.CoreGraphics.CGLayerGetContext
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGSizeMake
 import platform.Metal.MTLBufferProtocol
 import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLDeviceProtocol
@@ -114,6 +115,7 @@ import platform.UIKit.UIColor
 import platform.UIKit.UIEvent
 import platform.UIKit.UIGraphicsBeginImageContext
 import platform.UIKit.UIGraphicsEndImageContext
+import platform.UIKit.UIGraphicsImageRenderer
 import platform.UIKit.UIGraphicsPopContext
 import platform.UIKit.UIGraphicsPushContext
 import platform.UIKit.UITouch
@@ -123,7 +125,9 @@ import platform.UIKit.backgroundColor
 import platform.UIKit.drawViewHierarchyInRect
 import platform.UIKit.insertSubview
 import platform.UIKit.layoutIfNeeded
+import platform.UIKit.performWithoutAnimation
 import platform.UIKit.removeFromSuperview
+import platform.UIKit.setAnimationsEnabled
 import platform.UIKit.setContentScaleFactor
 import platform.UIKit.setFrame
 import platform.UIKit.setNeedsDisplay
@@ -146,18 +150,6 @@ val metalResourceStorageMode =
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
 
-private class Cache(
-    /**
-     * Custom memory space to draw
-     * https://medium.com/@s1ddok/combine-the-power-of-coregraphics-and-metal-by-sharing-resource-memory-eabb4c1be615
-     */
-    val textureMemoryPtr: CPointer<UByteVarOf<Byte>>, //todo clear cache
-    val context: CPointer<CGContext>,
-    val textureRegion: CValue<MTLRegion>,
-    val descriptor: MTLTextureDescriptor,
-    val texture: MTLTextureProtocol,
-)
-
 @Composable
 public fun <T : UIView> UIKitInteropView(
     background: Color = Color.White,
@@ -168,6 +160,7 @@ public fun <T : UIView> UIKitInteropView(
     useMetalTexture: Boolean = true,
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
+    useRasterization: Boolean = false,
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
 
@@ -191,11 +184,11 @@ public fun <T : UIView> UIKitInteropView(
         }
     }
     LaunchedEffect(Unit) {
-        while (true) {
+        while (useMetalTexture) {
             withFrameNanos { it }
             withContext(Dispatchers.Default) {
                 val uiView = componentInfo.component
-                val size = uiView.bounds().useContents { IntSize((size.width * density).toInt(), (size.height * density).toInt()) }
+                val size = uiView.bounds().useContents { IntSize((size.width * density + 0.5).toInt(), (size.height * density + 0.5).toInt()) }
                 if (size.width != 0 && size.height != 0) {
                     val pixelFormat = MTLPixelFormatRGBA8Unorm
                     val pixelRowAlignment = device.minimumTextureBufferAlignmentForPixelFormat(pixelFormat)
@@ -255,6 +248,7 @@ public fun <T : UIView> UIKitInteropView(
                             descriptor = descriptor,
                             texture = texture!!,
                         )
+                        println("create new cache, size: $size")
                     }
                     val cache = cache
                     if (cache != null) {
@@ -295,8 +289,11 @@ public fun <T : UIView> UIKitInteropView(
                     val rect = rectInPixels / density
                     val cgRect = rect.toCGRect()
                     CATransaction.begin()
-                    componentInfo.container.setFrame(cgRect)
-                    componentInfo.component.setFrame(CGRectMake(0.0, 0.0, rect.width.toDouble(), rect.height.toDouble()))
+                    //UIView.setAnimationsEnabled(false)
+                    UIView.performWithoutAnimation {
+                        componentInfo.container.setFrame(cgRect)
+                        componentInfo.component.setFrame(CGRectMake(0.0, 0.0, rect.width.toDouble(), rect.height.toDouble()))
+                    }
                     CATransaction.commit()
                     componentInfo.component.layoutIfNeeded()
                     componentInfo.component.setNeedsDisplay()
@@ -371,7 +368,7 @@ public fun <T : UIView> UIKitInteropView(
                 }
             }
         }.apply {
-            layer.setShouldRasterize(true)
+            layer.setShouldRasterize(useRasterization)
             addSubview(componentInfo.component)
             //todo like in Desktop focusTraversalPolicy = object : LayoutFocusTraversalPolicy() {
         }
@@ -550,3 +547,15 @@ fun UIView.scale(scale: Float) {//todo scale needs as workaround to correctly ha
     layer.anchorPoint = CGPointMake(0.0, 0.0)//todo works only on iOS 16 and newer
     layer.transform = CATransform3DMakeScale(scale.toDouble(), scale.toDouble(), 1.0)
 }
+
+private class Cache(
+    /**
+     * Custom memory space to draw
+     * https://medium.com/@s1ddok/combine-the-power-of-coregraphics-and-metal-by-sharing-resource-memory-eabb4c1be615
+     */
+    val textureMemoryPtr: CPointer<UByteVarOf<Byte>>, //todo clear cache
+    val context: CPointer<CGContext>,
+    val textureRegion: CValue<MTLRegion>,
+    val descriptor: MTLTextureDescriptor,
+    val texture: MTLTextureProtocol,
+)
