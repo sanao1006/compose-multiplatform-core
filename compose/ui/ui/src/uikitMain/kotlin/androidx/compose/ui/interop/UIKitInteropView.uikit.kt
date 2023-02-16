@@ -39,9 +39,11 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.UIKitInteropModifier
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
@@ -49,6 +51,7 @@ import cnames.structs.CGContext
 import kotlin.coroutines.CoroutineContext
 import kotlin.native.concurrent.AtomicNativePtr
 import kotlin.native.internal.NativePtr
+import kotlin.random.Random
 import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.COpaque
 import kotlinx.cinterop.COpaquePointer
@@ -150,10 +153,10 @@ const val ON_SIMULATOR = true
  * On simulator available only private storage mode
  * https://developer.apple.com/documentation/metal/developing_metal_apps_that_run_in_simulator?language=objc
  */
-val metalResourceStorageMode =
-    if (ON_SIMULATOR) MTLResourceStorageModePrivate else MTLResourceStorageModeShared
+val metalResourceStorageMode = if (ON_SIMULATOR) MTLResourceStorageModePrivate else MTLResourceStorageModeShared
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
+val textureThreadContext = newSingleThreadContext("texture")
 
 @Composable
 public fun <T : UIView> UIKitInteropView(
@@ -165,11 +168,9 @@ public fun <T : UIView> UIKitInteropView(
     useMetalTexture: Boolean = true,
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
-    useRasterization: Boolean = true,
+    useRasterization: Boolean = false,
 ) {
     val componentInfo = remember { ComponentInfo<T>() }
-
-    val textureThreadContext = remember { newSingleThreadContext("texture") }
     val root = LocalLayerContainer.current
     val skikoTouchEventHandler = SkikoTouchEventHandler.current
     val density = LocalDensity.current.density
@@ -178,6 +179,9 @@ public fun <T : UIView> UIKitInteropView(
     val focusSwitcher = remember { FocusSwitcher(componentInfo, focusManager) }
     var rectInPixels by remember { mutableStateOf(IntRect(0, 0, 0, 0)) }
     var uiViewSize by remember { mutableStateOf(IntSize(0, 0)) }
+    var localToWindowOffset: IntOffset by remember { mutableStateOf(IntOffset.Zero) }
+    var offsets: List<IntOffset> by remember { mutableStateOf(listOf()) }
+    var previousDrawBehindOffsets: List<IntOffset> by remember { mutableStateOf(listOf()) }
     var cache: Cache? by remember { mutableStateOf(null) }
     val mtlSkikoImage: Image? = remember(cache?.texture) {
         cache?.texture?.let {
@@ -189,96 +193,107 @@ public fun <T : UIView> UIKitInteropView(
             backendTextureToImage(skikoBackendTexture)
         }
     }
-    LaunchedEffect(Unit) {
-        while (useMetalTexture) {
-            withFrameNanos { it }
-            withContext(textureThreadContext) {
-                val uiView = componentInfo.component
-                val size = uiView.bounds().useContents { IntSize((size.width * density + 0.5).toInt(), (size.height * density + 0.5).toInt()) }
-                if (size.width != 0 && size.height != 0) {
-                    val pixelFormat = MTLPixelFormatRGBA8Unorm
-                    val pixelRowAlignment = device.minimumTextureBufferAlignmentForPixelFormat(pixelFormat)
-                    val bytesPerRow = alignUp(size = size.width, align = pixelRowAlignment.toInt()) * 4 // 4 color components
-                    val pagesize = getpagesize()
-                    val allocationSize = alignUp(size = bytesPerRow * size.height, align = pagesize)
+    fun updateTexture() {
+//        println("update texture--------------------------------------------------------------------")
+        val uiView = componentInfo.component
+        val size = uiView.bounds().useContents { IntSize((size.width * density + 0.5).toInt(), (size.height * density + 0.5).toInt()) }
+        if (size.width != 0 && size.height != 0) {
+            val pixelFormat = MTLPixelFormatRGBA8Unorm
+            val pixelRowAlignment = device.minimumTextureBufferAlignmentForPixelFormat(pixelFormat)
+            val bytesPerRow = alignUp(size = size.width, align = pixelRowAlignment.toInt()) * 4 // 4 color components
+            val pagesize = getpagesize()
+            val allocationSize = alignUp(size = bytesPerRow * size.height, align = pagesize)
 
-                    if (uiViewSize != size) {
-                        uiViewSize = size
-                        val descriptor = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
-                            pixelFormat = pixelFormat,
-                            width = size.width.toULong(),
-                            height = size.height.toULong(),
-                            mipmapped = false
-                        ).apply {
-                            if(!ON_SIMULATOR) {
-                                storageMode = metalResourceStorageMode
-                                // we are only going to read from this texture on GPU side
-                                usage = MTLTextureUsageShaderRead
-                            }
-                        }
-                        val textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
-                        //val textureMemoryPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
-                        //posix_memalign(textureMemoryPtr, pagesize.toULong(), allocationSize.toULong())
-                        //val textureMemoryPtr: CPointer<UByteVarOf<Byte>> = nativeHeap.allocArray<ByteVar>(allocationSize)
-                        val textureRegion = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong())
-                        val context = CGBitmapContextCreate(
-                            data = textureMemoryPtr,
-                            width = size.width.toULong(),
-                            height = size.height.toULong(),
-                            bitsPerComponent = 8,
-                            bytesPerRow = bytesPerRow.toULong(),
-                            space = CGColorSpaceCreateDeviceRGB(),
-                            bitmapInfo = if (useAlphaComponent) CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value else CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value
-                        )
-                        CGContextScaleCTM(context, density.toDouble(), density.toDouble())
-                        val texture = if (ON_SIMULATOR) {
-                            device.newTextureWithDescriptor(descriptor)
-                        } else {
-                            val buffer = device.newBufferWithBytesNoCopy(
-                                pointer = CGBitmapContextGetData(context),
-                                length = allocationSize.toULong(),
-                                options = metalResourceStorageMode,
-                                deallocator = null /*{ pointer, length in free(data) }*/
-                            )!!
-                            buffer.newTextureWithDescriptor(
-                                descriptor = descriptor,
-                                offset = 0,
-                                bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
-                            )
-                        }
-                        cache = Cache(
-                            textureMemoryPtr = textureMemoryPtr,
-                            context = context!!,
-                            textureRegion = textureRegion,
-                            descriptor = descriptor,
-                            texture = texture!!,
-                        )
+            if (uiViewSize != size) {
+                uiViewSize = size
+                val descriptor = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
+                    pixelFormat = pixelFormat,
+                    width = size.width.toULong(),
+                    height = size.height.toULong(),
+                    mipmapped = false
+                ).apply {
+                    if(!ON_SIMULATOR) {
+                        storageMode = metalResourceStorageMode
+                        // we are only going to read from this texture on GPU side
+                        usage = MTLTextureUsageShaderRead
                     }
-                    val cache = cache
-                    if (cache != null) {
-                        CGContextClearRect(cache.context, componentInfo.container.bounds())
-                        if (drawViewHierarchyInRect) {
-                            //UIGraphicsBeginImageContext()
-                            UIGraphicsPushContext(cache.context)
-                            componentInfo.container.drawViewHierarchyInRect(
-                                rect = componentInfo.container.bounds(),
-                                afterScreenUpdates = false // todo warning in console
-                            )
-                            UIGraphicsPopContext()
-                            //UIGraphicsEndImageContext()
-                        } else {
-                            componentInfo.container.layer.renderInContext(cache.context)
-                        }
+                }
+                val textureMemoryPtr = nativeHeap.allocArray<ByteVar>(allocationSize)
+                //val textureMemoryPtr:CValuesRef<CPointerVarOf<COpaquePointer>> = cValue()
+                //posix_memalign(textureMemoryPtr, pagesize.toULong(), allocationSize.toULong())
+                //val textureMemoryPtr: CPointer<UByteVarOf<Byte>> = nativeHeap.allocArray<ByteVar>(allocationSize)
+                val textureRegion = MTLRegionMake2D(0, 0, size.width.toULong(), size.height.toULong())
+                val context = CGBitmapContextCreate(
+                    data = textureMemoryPtr,
+                    width = size.width.toULong(),
+                    height = size.height.toULong(),
+                    bitsPerComponent = 8,
+                    bytesPerRow = bytesPerRow.toULong(),
+                    space = CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo = if (useAlphaComponent) CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value else CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value
+                )
+                CGContextScaleCTM(context, density.toDouble(), density.toDouble())
+                val texture = if (ON_SIMULATOR) {
+                    device.newTextureWithDescriptor(descriptor)
+                } else {
+                    val buffer = device.newBufferWithBytesNoCopy(
+                        pointer = CGBitmapContextGetData(context),
+                        length = allocationSize.toULong(),
+                        options = metalResourceStorageMode,
+                        deallocator = null /*{ pointer, length in free(data) }*/
+                    )!!
+                    buffer.newTextureWithDescriptor(
+                        descriptor = descriptor,
+                        offset = 0,
+                        bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
+                    )
+                }
+                cache = Cache(
+                    textureMemoryPtr = textureMemoryPtr,
+                    context = context!!,
+                    textureRegion = textureRegion,
+                    descriptor = descriptor,
+                    texture = texture!!,
+                )
+            }
+            val cache = cache
+            if (cache != null) {
+                CGContextClearRect(cache.context, componentInfo.container.bounds())
+                if (drawViewHierarchyInRect) {
+                    //UIGraphicsBeginImageContext()
+                    UIGraphicsPushContext(cache.context)
+                    componentInfo.container.drawViewHierarchyInRect(
+                        rect = componentInfo.container.bounds(),
+                        afterScreenUpdates = false // todo warning in console
+                    )
+                    UIGraphicsPopContext()
+                    //UIGraphicsEndImageContext()
+                } else {
+                    componentInfo.container.layer.renderInContext(cache.context)
+                }
 //                        println("componentInfo.container.layer.contents: ${componentInfo.container.layer.contents}")
-                        if (ON_SIMULATOR) {
-                            cache.texture.replaceRegion(
-                                region = cache.textureRegion,
-                                mipmapLevel = 0,
-                                withBytes = cache.textureMemoryPtr /*CGBitmapContextGetData(context)*/,
-                                bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
-                            )
-                        }
-                    }
+                if (ON_SIMULATOR) {
+                    cache.texture.replaceRegion(
+                        region = cache.textureRegion,
+                        mipmapLevel = 0,
+                        withBytes = cache.textureMemoryPtr /*CGBitmapContextGetData(context)*/,
+                        bytesPerRow = bytesPerRow.toULong() /*CGBitmapContextGetBytesPerRow(context)*/
+                    )
+                }
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        val MAX_OFFSETS_SIZE = 4
+        while (true) {
+            withFrameNanos { it }
+            withContext2(textureThreadContext) {
+                offsets = offsets + localToWindowOffset
+                if (offsets.size > MAX_OFFSETS_SIZE) {
+                    offsets = offsets.subList(1, MAX_OFFSETS_SIZE + 1)
+                }
+                if (useMetalTexture || offsets.dropLast(1).all {it == offsets[0]} && offsets.lastOrNull() != offsets.firstOrNull()) {
+                    updateTexture()
                 }
             }
         }
@@ -286,7 +301,8 @@ public fun <T : UIView> UIKitInteropView(
     Box(
         modifier = modifier.onGloballyPositioned { childCoordinates ->
             val coordinates = childCoordinates.parentCoordinates!!
-            val newRectInPixels = IntRect(coordinates.localToWindow(Offset.Zero).round(), coordinates.size)
+            localToWindowOffset = coordinates.localToWindow(Offset.Zero).round()
+            val newRectInPixels = IntRect(localToWindowOffset, coordinates.size)
             if (rectInPixels != newRectInPixels) {
                 rectInPixels = newRectInPixels
                 dispatch_async(dispatch_get_main_queue()) {
@@ -306,8 +322,15 @@ public fun <T : UIView> UIKitInteropView(
                 }
             }
         }.drawBehind {
-            if (useMetalTexture) {
-                drawIntoCanvas {canvas->
+            val MAX_SIZE = 9
+            offsets.lastOrNull()?.let {
+                previousDrawBehindOffsets += it
+                if (previousDrawBehindOffsets.size > MAX_SIZE) {
+                    previousDrawBehindOffsets = previousDrawBehindOffsets.subList(1, MAX_SIZE + 1)
+                }
+            }
+            if (useMetalTexture || previousDrawBehindOffsets.size >= MAX_SIZE && !previousDrawBehindOffsets.all { it == previousDrawBehindOffsets[0] }) {
+                drawIntoCanvas { canvas->
                     if (mtlSkikoImage != null) {
                         canvas.drawRect(0f, 0f, uiViewSize.width.toFloat(), uiViewSize.height.toFloat(), Paint().apply {
                             color = background
@@ -316,7 +339,7 @@ public fun <T : UIView> UIKitInteropView(
                     }
                 }
             } else {
-                drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)
+                drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)//draw transparent hole
             }
         }.then(UIKitInteropModifier(rectInPixels.width, rectInPixels.height))
     ) {
@@ -389,9 +412,7 @@ public fun <T : UIView> UIKitInteropView(
         }
     }
     SideEffect {
-        if (!useMetalTexture) {
-            componentInfo.container.backgroundColor = parseColor(background)
-        }
+        componentInfo.container.backgroundColor = parseColor(background)
         componentInfo.updater.update = update
     }
 }
@@ -574,9 +595,15 @@ private class Cache(
     fun clear(context: CoroutineContext) {
         println("clear cache, size: ${texture.width} x ${texture.height}")
         GlobalScope.launch {
-            withContext(context) {
+            withContext2(context) {
                 nativeHeap.free(textureMemoryPtr)
             }
         }
     }
 }
+
+
+// measure texture memory performance on real device (CPU)
+// onGloballyPositioned skip
+// рисование через Skia слои
+
