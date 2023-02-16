@@ -258,7 +258,9 @@ public fun <T : UIView> UIKitInteropView(
             }
             val cache = cache
             if (cache != null) {
-                CGContextClearRect(cache.context, componentInfo.container.bounds())
+                if (ON_SIMULATOR) {
+                    CGContextClearRect(cache.context, componentInfo.container.bounds())
+                }
                 if (drawViewHierarchyInRect) {
                     //UIGraphicsBeginImageContext()
                     UIGraphicsPushContext(cache.context)
