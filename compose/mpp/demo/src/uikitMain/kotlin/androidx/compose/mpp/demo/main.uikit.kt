@@ -46,6 +46,8 @@ import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
 import platform.MapKit.MKMapView
+import platform.UIKit.UIButton
+import platform.UIKit.UIControlStateNormal
 import platform.UIKit.UISwitch
 import platform.UIKit.UIViewController
 import platform.WebKit.WKWebView
@@ -93,15 +95,23 @@ private fun UIKitDemo() {
             Stub()
         }
         Example("UISwitch") {
-            UIKitInteropView(
-                modifier = Modifier.size(51.dp, 32.dp),
-                factory = { UISwitch() })
+            repeat(2) {
+                Row {
+                    repeat(3) {
+                        UIKitInteropView(
+                            modifier = Modifier.size(51.dp, 32.dp),
+                            factory = { UISwitch() })
+                    }
+                }
+            }
         }
         Example("UITextField with shared state") {
-            ComposeUITextField(
-                Modifier.fillMaxWidth().height(50.dp),
-                textState1.value,
-                onValueChange = { textState1.value = it })
+            repeat(2) {
+                ComposeUITextField(
+                    Modifier.fillMaxWidth().height(50.dp),
+                    textState1.value,
+                    onValueChange = { textState1.value = it })
+            }
             TextField(value = textState1.value, onValueChange = { textState1.value = it })
         }
 //                Example("WebView") {
@@ -112,30 +122,29 @@ private fun UIKitDemo() {
 //                    })
 //                }
         Example("MapView") {
-            UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
-                val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                mapView
-            })
-        }
-        Example("MapView") {
-            UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
-                val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                mapView
-            })
+            Row {
+                UIKitInteropView(modifier = Modifier.size(300.dp, 300.dp), factory = {
+                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 200.0, 200.0))
+                    mapView
+                })
+            }
         }
         Example("Modifiers") {
             var alpha by remember { mutableStateOf(1f) }
             var corner by remember { mutableStateOf(0f) }
             var rotate by remember { mutableStateOf(0f) }
-            UIKitInteropView(
-                modifier = Modifier.size(300.dp, 300.dp)
-                    .alpha(alpha)
-                    .clip(RoundedCornerShape(size = corner.dp))
-                    .rotate(rotate),
-                factory = {
-                    val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 300.0, 300.0))
-                    mapView
-                })
+            Row {
+                UIKitInteropView(
+                    modifier = Modifier.size(300.dp, 300.dp)
+                        .alpha(alpha)
+                        .clip(RoundedCornerShape(size = corner.dp))
+                        .rotate(rotate),
+                    factory = {
+                        val mapView = MKMapView(frame = CGRectMake(0.0, 0.0, 200.0, 200.0))
+                        mapView
+                    })
+
+            }
             Row {
                 Text("Alpha")
                 Slider(alpha, onValueChange = { alpha = it }, Modifier.fillMaxWidth())
@@ -187,9 +196,9 @@ internal fun ColumnScope.Example(title: String, content: @Composable () -> Unit)
 
 internal fun LazyListScope.Example(title: String, content: @Composable () -> Unit) {
     item {
-        Column(Modifier.fillMaxWidth().border(width = 1.dp, color = Color.Black).padding(10.dp)) {
-            Text(title)
-            Spacer(Modifier.size(10.dp))
+        Column(Modifier.fillMaxWidth().border(width = 1.dp, color = Color.Black)) {
+//            Text(title)
+//            Spacer(Modifier.size(10.dp))
             content()
         }
     }

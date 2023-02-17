@@ -52,6 +52,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.native.concurrent.AtomicNativePtr
 import kotlin.native.internal.NativePtr
 import kotlin.random.Random
+import kotlin.system.getTimeNanos
 import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.COpaque
 import kotlinx.cinterop.COpaquePointer
@@ -77,12 +78,16 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.value
+import kotlinx.coroutines.CloseableCoroutineDispatcher
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.jetbrains.skia.GrBackendTexture
 import org.jetbrains.skia.Image
 import org.jetbrains.skiko.SkikoTouchEvent
@@ -148,7 +153,11 @@ import platform.darwin.dispatch_get_main_queue
 import platform.posix.getpagesize
 import platform.posix.posix_memalign
 
-const val ON_SIMULATOR = true
+const val MEASURE_TEXTURE_FPS = false
+const val ON_SIMULATOR = false
+const val BACKGROUND_THREAD = true
+val textureThreadContexts = List(3){newSingleThreadContext("texture-${Random.nextInt()}")}//newFixedThreadPoolContext(4, "")
+
 /**
  * On simulator available only private storage mode
  * https://developer.apple.com/documentation/metal/developing_metal_apps_that_run_in_simulator?language=objc
@@ -156,7 +165,6 @@ const val ON_SIMULATOR = true
 val metalResourceStorageMode = if (ON_SIMULATOR) MTLResourceStorageModePrivate else MTLResourceStorageModeShared
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
-val textureThreadContext = newSingleThreadContext("texture")
 
 @Composable
 public fun <T : UIView> UIKitInteropView(
@@ -170,6 +178,11 @@ public fun <T : UIView> UIKitInteropView(
     drawViewHierarchyInRect: Boolean = true,
     useRasterization: Boolean = false,
 ) {
+    var previousUpdateTextureTime:Long by remember { mutableStateOf(getTimeNanos()) }
+    var averageUpdateTextureFps: Double by remember { mutableStateOf(40.0) }
+    var frameStart: Boolean by remember { mutableStateOf(false) }
+    val textureThreadContext: CoroutineContext = remember { textureThreadContexts.random() }
+
     val componentInfo = remember { ComponentInfo<T>() }
     val root = LocalLayerContainer.current
     val skikoTouchEventHandler = SkikoTouchEventHandler.current
@@ -194,6 +207,20 @@ public fun <T : UIView> UIKitInteropView(
         }
     }
     fun updateTexture() {
+        if (frameStart) return
+        frameStart = true
+
+        if(MEASURE_TEXTURE_FPS) {
+            val delta = -previousUpdateTextureTime + getTimeNanos().also { previousUpdateTextureTime = it }
+            val seconds = delta.toFloat() / 1E9
+            val fps = 1 / seconds
+            averageUpdateTextureFps = (averageUpdateTextureFps * 60 + fps) / 61
+
+            if (Random.nextInt(100) == 0) {
+                println("averageUpdateTextureFps: ${(averageUpdateTextureFps * 10).toInt() / 10.0}")
+            }
+        }
+
 //        println("update texture--------------------------------------------------------------------")
         val uiView = componentInfo.component
         val size = uiView.bounds().useContents { IntSize((size.width * density + 0.5).toInt(), (size.height * density + 0.5).toInt()) }
@@ -284,12 +311,17 @@ public fun <T : UIView> UIKitInteropView(
                 }
             }
         }
+        frameStart = false
     }
     LaunchedEffect(Unit) {
         val MAX_OFFSETS_SIZE = 4
-        while (true) {
-            withFrameNanos { it }
-            withContext2(textureThreadContext) {
+        withContext2(textureThreadContext) {
+            while (true) {
+                if (BACKGROUND_THREAD) {
+                    delay(1)
+                } else {
+                    withFrameNanos { it }
+                }
                 offsets = offsets + localToWindowOffset
                 if (offsets.size > MAX_OFFSETS_SIZE) {
                     offsets = offsets.subList(1, MAX_OFFSETS_SIZE + 1)
@@ -419,8 +451,14 @@ public fun <T : UIView> UIKitInteropView(
     }
 }
 
-inline fun withContext2(dispatcher: Any, function: () -> Unit) {
-    function()
+suspend fun withContext2(context: CoroutineContext, action: suspend  () -> Unit) {
+    if (BACKGROUND_THREAD) {
+        withContext(context) {
+            action()
+        }
+    } else {
+        action()
+    }
 }
 
 //<editor-fold desc="FocusSwitcher">
