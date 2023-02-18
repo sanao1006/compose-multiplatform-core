@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
+import kotlin.random.Random
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
@@ -91,16 +92,18 @@ private fun UIKitDemo() {
         }
     }
     LazyColumn(Modifier.background(Color.LightGray)) {
-        repeat(12) {
+        repeat(14) {
             Stub()
         }
         Example("UISwitch") {
             repeat(2) {
                 Row {
-                    repeat(3) {
+                    repeat(6) {
                         UIKitInteropView(
-                            modifier = Modifier.size(51.dp, 32.dp),
-                            factory = { UISwitch() })
+                            modifier = Modifier.size(51.dp, 31.dp),
+                            factory = { UISwitch() },
+                            background = if(Random.nextBoolean()) Color.White else Color.LightGray
+                        )
                     }
                 }
             }
