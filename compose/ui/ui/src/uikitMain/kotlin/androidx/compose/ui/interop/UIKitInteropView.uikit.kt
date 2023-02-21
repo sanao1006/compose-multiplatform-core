@@ -156,7 +156,7 @@ import platform.posix.posix_memalign
 const val MEASURE_TEXTURE_FPS = false
 const val ON_SIMULATOR = true
 const val BACKGROUND_THREAD = false
-val textureThreadContexts = List(3){newSingleThreadContext("texture-${Random.nextInt()}")}//newFixedThreadPoolContext(4, "")
+val textureThreadContexts = List(3){newSingleThreadContext("texture-${Random.nextInt()}")}
 
 /**
  * On simulator available only private storage mode
