@@ -179,7 +179,7 @@ public fun <T : UIView> UIKitInteropView(
     modifier: Modifier = Modifier,
     update: (T) -> Unit = NoOpUpdate,
     dispose: (T) -> Unit = {},
-    useMetalTexture: UseMetalTexture = UseMetalTexture.HOLE,
+    useMetalTexture: UseMetalTexture = UseMetalTexture.NO,
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
     useRasterization: Boolean = false,

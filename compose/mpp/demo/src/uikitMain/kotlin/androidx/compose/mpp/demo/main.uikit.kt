@@ -2,6 +2,7 @@ package androidx.compose.mpp.demo
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Slider
 import androidx.compose.material.Text
@@ -48,9 +50,12 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
 import platform.MapKit.MKMapView
 import platform.UIKit.UIButton
+import platform.UIKit.UIColor
 import platform.UIKit.UIControlStateNormal
 import platform.UIKit.UISwitch
+import platform.UIKit.UIView
 import platform.UIKit.UIViewController
+import platform.UIKit.backgroundColor
 import platform.WebKit.WKWebView
 
 fun main() {
@@ -91,7 +96,24 @@ private fun UIKitDemo() {
             FpsCounter()
         }
     }
-    LazyColumn(Modifier.background(Color.LightGray)) {
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(Unit) {
+        while (true) {
+            withFrameNanos {}
+            listState.scrollBy(10f)
+        }
+    }
+    LazyColumn(state = listState) {
+        items(300) {
+            UIKitInteropView(
+                modifier = Modifier.fillMaxWidth().height(150.dp),
+                factory = {UIView().apply { backgroundColor = UIColor.yellowColor }},
+            )
+            Box(Modifier.fillMaxSize().height(300.dp))
+        }
+    }
+    if(false) LazyColumn(Modifier.background(Color.LightGray)) {
         repeat(14) {
             Stub()
         }
