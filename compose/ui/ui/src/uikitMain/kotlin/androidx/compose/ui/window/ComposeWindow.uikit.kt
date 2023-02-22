@@ -70,16 +70,24 @@ import platform.UIKit.setNeedsDisplay
 import platform.UIKit.window
 import platform.darwin.NSObject
 
+fun ComposeUIViewController(content: @Composable () -> Unit): UIViewController =
+    ComposeWindow().apply {
+        setContent(content)
+    }
+
 // The only difference with macos' Window is that
 // it has return type of UIViewController rather than unit.
+@Deprecated(
+    "use ComposeUIViewController instead",
+    replaceWith = ReplaceWith(
+        "ComposeUIViewController(content = content)",
+        "androidx.compose.ui.window"
+    )
+)
 fun Application(
     title: String = "JetpackNativeWindow",
     content: @Composable () -> Unit = { }
-
-) = ComposeWindow().apply {
-    setTitle(title)
-    setContent(content)
-} as UIViewController
+):UIViewController = ComposeUIViewController(content)
 
 @ExportObjCClass
 internal actual class ComposeWindow : UIViewController {
@@ -101,19 +109,31 @@ internal actual class ComposeWindow : UIViewController {
             val keyboardInfo = arg.userInfo!!["UIKeyboardFrameEndUserInfoKey"] as NSValue
             val keyboardHeight = keyboardInfo.CGRectValue().useContents { size.height }
             val screenHeight = UIScreen.mainScreen.bounds.useContents { size.height }
+            val magicMultiplier = density.density - 1 // todo magic number
+            val viewY = UIScreen.mainScreen.coordinateSpace.convertPoint(
+                point = CGPointMake(0.0, 0.0),
+                fromCoordinateSpace = view.coordinateSpace
+            ).useContents { y } * magicMultiplier
             val focused = layer.getActiveFocusRect()
             if (focused != null) {
                 val focusedBottom = focused.bottom.value + getTopLeftOffset().y
-                val hiddenPartOfFocusedElement = focusedBottom + keyboardHeight - screenHeight
+                val hiddenPartOfFocusedElement =
+                    focusedBottom + keyboardHeight - screenHeight - viewY
                 if (hiddenPartOfFocusedElement > 0) {
                     // If focused element hidden by keyboard, then change UIView bounds.
                     // Focused element will be visible
+                    val focusedTop = focused.top.value
+                    val composeOffsetY = if (hiddenPartOfFocusedElement < focusedTop) {
+                        hiddenPartOfFocusedElement
+                    } else {
+                        maxOf(focusedTop, 0f).toDouble()
+                    }
                     view.setClipsToBounds(true)
                     val (width, height) = getViewFrameSize()
                     view.layer.setBounds(
                         CGRectMake(
                             x = 0.0,
-                            y = hiddenPartOfFocusedElement,
+                            y = composeOffsetY,
                             width = width.toDouble(),
                             height = height.toDouble()
                         )
@@ -134,10 +154,6 @@ internal actual class ComposeWindow : UIViewController {
         fun keyboardDidHide(arg: NSNotification) {
             view.setClipsToBounds(false)
         }
-    }
-
-    actual fun setTitle(title: String) {
-        println("TODO: set title to SkiaWindow")
     }
 
     override fun loadView() {
@@ -247,6 +263,7 @@ internal actual class ComposeWindow : UIViewController {
         val width = size.useContents { width } * scale
         val height = size.useContents { height } * scale
         layer.setSize(width.roundToInt(), height.roundToInt())
+        layer.layer.needRedraw()
         super.viewWillTransitionToSize(size, withTransitionCoordinator)
     }
 
@@ -311,6 +328,11 @@ internal actual class ComposeWindow : UIViewController {
     ) {
         println("ComposeWindow.setContent")
         this.content = content
+    }
+
+    override fun viewDidUnload() {
+        super.viewDidUnload()
+        this.dispose()
     }
 
     actual fun dispose() {

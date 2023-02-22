@@ -36,30 +36,11 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.interop.UIKitInteropView
 import androidx.compose.ui.main.defaultUIKitMain
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Application
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import kotlin.random.Random
-import platform.CoreGraphics.CGRectMake
-import platform.Foundation.NSURL
-import platform.Foundation.NSURLRequest
-import platform.MapKit.MKMapView
-import platform.UIKit.UIButton
-import platform.UIKit.UIColor
-import platform.UIKit.UIControlStateNormal
-import platform.UIKit.UISwitch
-import platform.UIKit.UIView
-import platform.UIKit.UIViewController
-import platform.UIKit.backgroundColor
-import platform.WebKit.WKWebView
+import androidx.compose.ui.window.ComposeUIViewController
+
 
 fun main() {
-    defaultUIKitMain("ComposeDemo", Application("Compose/Native sample") {
+    defaultUIKitMain("ComposeDemo", ComposeUIViewController {
         myContent()
     })
 }
