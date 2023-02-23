@@ -36,7 +36,30 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.interop.UIKitInteropView
 import androidx.compose.ui.main.defaultUIKitMain
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeUIViewController
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import kotlin.random.Random
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import platform.CoreGraphics.CGRectMake
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLRequest
+import platform.MapKit.MKMapView
+import platform.UIKit.UIColor
+import platform.UIKit.UISwitch
+import platform.UIKit.UIView
+import platform.UIKit.UIViewController
+import platform.UIKit.backgroundColor
+import platform.WebKit.WKWebView
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
+import platform.darwin.dispatch_get_main_queue
 
 
 fun main() {
@@ -46,11 +69,14 @@ fun main() {
 }
 
 fun MainViewController(): UIViewController =
-    Application("UIKit Demo") {
-        if (true) {
-            UIKitDemo()
-        } else {
-            myContent()
+    ComposeUIViewController {
+        Box(Modifier.fillMaxSize().background(Color.LightGray)) {
+            if (true) {
+                UIKitDemo()
+            } else {
+                myContent()
+            }
+            Box(Modifier.size(50.dp).background(Color.Green).align(Alignment.BottomEnd))
         }
     }
 
@@ -82,16 +108,33 @@ private fun UIKitDemo() {
     LaunchedEffect(Unit) {
         while (true) {
             withFrameNanos {}
-            listState.scrollBy(10f)
+            listState.scrollBy(15f)
         }
     }
     LazyColumn(state = listState) {
-        items(300) {
+        item {
+            Box(Modifier.fillMaxWidth().height(600.dp))
+            TextField(value = "afsda fsaf asd f", onValueChange = {})
+        }
+        items(12345) {
+//            ComposeUITextField(
+//                Modifier.fillMaxWidth().height(100.dp),
+//                textState1.value,
+//                onValueChange = { textState1.value = it })
+
             UIKitInteropView(
-                modifier = Modifier.fillMaxWidth().height(150.dp),
-                factory = {UIView().apply { backgroundColor = UIColor.yellowColor }},
+                modifier = Modifier.fillMaxWidth().height(300.dp),
+                factory = { MKMapView() },
+//                factory = {UIView().apply { backgroundColor = UIColor.yellowColor }},
             )
-            Box(Modifier.fillMaxSize().height(300.dp))
+            Spacer(Modifier.height(20.dp))
+            UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
+                val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
+                wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString(if (Random.nextBoolean()) "https://google.com" else "https://kotlinlang.org")!!))
+                wkWebView
+            })
+
+            Box(Modifier.fillMaxSize().height(400.dp))
         }
     }
     if(false) LazyColumn(Modifier.background(Color.LightGray)) {

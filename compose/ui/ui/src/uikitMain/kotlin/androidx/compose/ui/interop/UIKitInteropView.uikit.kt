@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -62,6 +63,7 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVarOf
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.CValuesRef
+import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.UByteVarOf
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
@@ -83,6 +85,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.newSingleThreadContext
@@ -109,6 +116,8 @@ import platform.CoreGraphics.CGLayerGetContext
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
+import platform.Foundation.NSRunLoop
+import platform.Foundation.NSSelectorFromString
 import platform.Metal.MTLBufferProtocol
 import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLDeviceProtocol
@@ -120,6 +129,7 @@ import platform.Metal.MTLResourceStorageModeShared
 import platform.Metal.MTLTextureDescriptor
 import platform.Metal.MTLTextureProtocol
 import platform.Metal.MTLTextureUsageShaderRead
+import platform.QuartzCore.CADisplayLink
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.CATransform3DConcat
 import platform.QuartzCore.CATransform3DMakeScale
@@ -344,22 +354,12 @@ public fun <T : UIView> UIKitInteropView(
             localToWindowOffset = coordinates.localToWindow(Offset.Zero).round()
             val newRectInPixels = IntRect(localToWindowOffset, coordinates.size)
             if (rectInPixels != newRectInPixels) {
-                rectInPixels = newRectInPixels
-                dispatch_async(dispatch_get_main_queue()) {
-                    val rect = rectInPixels / density
-                    val cgRect = rect.toCGRect()
-                    CATransaction.begin()
-                    //UIView.setAnimationsEnabled(false)
-                    UIView.performWithoutAnimation {
-                        componentInfo.container.setFrame(cgRect)
-                        componentInfo.component.setFrame(CGRectMake(0.0, 0.0, rect.width.toDouble(), rect.height.toDouble()))
-                    }
-                    CATransaction.commit()
-                    componentInfo.component.layoutIfNeeded()
-                    componentInfo.component.setNeedsDisplay()
-                    componentInfo.component.setNeedsUpdateConstraints()
-                    componentInfo.component.resignFirstResponder()
+                val rect = newRectInPixels / density
+                componentInfo.container.setFrame(rect.toCGRect())
+                if (rectInPixels.width != newRectInPixels.width || rectInPixels.height != newRectInPixels.height) {
+                    componentInfo.component.setFrame(CGRectMake(0.0, 0.0, rect.width.toDouble(), rect.height.toDouble()))
                 }
+                rectInPixels = newRectInPixels
             }
         }.drawBehind {
             val MAX_SIZE = 9
