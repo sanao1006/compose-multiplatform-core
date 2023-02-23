@@ -46,12 +46,17 @@ import androidx.compose.ui.window.ComposeUIViewController
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlin.random.Random
+import kotlinx.cinterop.cValue
+import kotlinx.cinterop.cValuesOf
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import platform.CoreGraphics.CGRectMake
+import platform.CoreLocation.CLLocationCoordinate2DMake
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
+import platform.MapKit.MKCoordinateRegionMakeWithDistance
 import platform.MapKit.MKMapView
+import platform.MapKit.MKPointAnnotation
 import platform.UIKit.UIColor
 import platform.UIKit.UISwitch
 import platform.UIKit.UIView
@@ -125,7 +130,19 @@ private fun UIKitDemo() {
                     onValueChange = { textState1.value = it })
                 1 -> UIKitInteropView(
                     modifier = Modifier.width(400.dp).height(300.dp),
-                    factory = { MKMapView() },
+                    factory = {
+                        val mkMapView = MKMapView()
+                        val cityAmsterdam = CLLocationCoordinate2DMake(52.3676, 4.9041)
+                        mkMapView.setRegion(
+                            MKCoordinateRegionMakeWithDistance(
+                                centerCoordinate = cityAmsterdam,
+                                5000.0, 5000.0
+                            ),
+                            animated = false
+                        )
+                        mkMapView.addAnnotation(MKPointAnnotation(cityAmsterdam, "I am here", null))
+                        mkMapView
+                    },
                 )
                 else -> UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
                     val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))

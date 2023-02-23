@@ -613,11 +613,6 @@ private class Updater<T : UIView>(
     }
 }
 
-fun UIView.scale(scale: Float) {//todo scale needs as workaround to correctly handle density
-    layer.anchorPoint = CGPointMake(0.0, 0.0)//todo works only on iOS 16 and newer
-    layer.transform = CATransform3DMakeScale(scale.toDouble(), scale.toDouble(), 1.0)
-}
-
 private class Cache(
     /**
      * Custom memory space to draw
