@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -117,24 +118,22 @@ private fun UIKitDemo() {
             TextField(value = "afsda fsaf asd f", onValueChange = {})
         }
         items(12345) {
-//            ComposeUITextField(
-//                Modifier.fillMaxWidth().height(100.dp),
-//                textState1.value,
-//                onValueChange = { textState1.value = it })
-
-            UIKitInteropView(
-                modifier = Modifier.fillMaxWidth().height(300.dp),
-                factory = { MKMapView() },
-//                factory = {UIView().apply { backgroundColor = UIColor.yellowColor }},
-            )
-            Spacer(Modifier.height(20.dp))
-            UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
-                val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
-                wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString(if (Random.nextBoolean()) "https://google.com" else "https://kotlinlang.org")!!))
-                wkWebView
-            })
-
-            Box(Modifier.fillMaxSize().height(400.dp))
+            when(it % 3) {
+                0 -> ComposeUITextField(
+                    Modifier.fillMaxWidth().height(50.dp),
+                    textState1.value,
+                    onValueChange = { textState1.value = it })
+                1 -> UIKitInteropView(
+                    modifier = Modifier.width(400.dp).height(300.dp),
+                    factory = { MKMapView() },
+                )
+                else -> UIKitInteropView(modifier = Modifier.size(300.dp, 400.dp), factory = {
+                    val wkWebView = WKWebView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0))
+                    wkWebView.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString(if (Random.nextBoolean()) "https://google.com" else "https://kotlinlang.org")!!))
+                    wkWebView
+                })
+            }
+            Box(Modifier.fillMaxSize().height(50.dp))
         }
     }
     if(false) LazyColumn(Modifier.background(Color.LightGray)) {

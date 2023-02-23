@@ -193,6 +193,7 @@ public fun <T : UIView> UIKitInteropView(
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
     useRasterization: Boolean = false,
+    interactive: Boolean = true,
 ) {
     var previousUpdateTextureTime:Long by remember { mutableStateOf(getTimeNanos()) }
     var averageUpdateTextureFps: Double by remember { mutableStateOf(40.0) }
@@ -332,7 +333,7 @@ public fun <T : UIView> UIKitInteropView(
     LaunchedEffect(Unit) {
         val MAX_OFFSETS_SIZE = 4
         withContext2(textureThreadContext) {
-            while (true) {
+            while (useMetalTexture.use) {
                 if (BACKGROUND_THREAD) {
                     delay(1)
                 } else {
@@ -381,26 +382,19 @@ public fun <T : UIView> UIKitInteropView(
             } else {
                 drawRect(Color.Transparent, blendMode = BlendMode.DstAtop)//draw transparent hole
             }
-        }.then(UIKitInteropModifier(rectInPixels.width, rectInPixels.height))
+        }.let {
+            if (interactive) {
+                it.then(UIKitInteropModifier(rectInPixels.width, rectInPixels.height))
+            } else {
+                it
+            }
+        }
     ) {
         focusSwitcher.Content()
     }
 
     DisposableEffect(factory) {
-//        val focusListener = object : FocusListener {
-//            override fun focusGained(e: FocusEvent) {
-//                if (componentInfo.container.isParentOf(e.oppositeComponent)) {
-//                    when (e.cause) {
-//                        FocusEvent.Cause.TRAVERSAL_FORWARD -> focusSwitcher.moveForward()
-//                        FocusEvent.Cause.TRAVERSAL_BACKWARD -> focusSwitcher.moveBackward()
-//                        else -> Unit
-//                    }
-//                }
-//            }
-//
-//            override fun focusLost(e: FocusEvent) = Unit
-//        }
-//        root.addFocusListener(focusListener)
+        //todo focus listener like in Desktop: val focusListener = object : FocusListener {
         componentInfo.component = factory()
         componentInfo.container = object : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
             override fun touchesBegan(touches: Set<*>, withEvent: UIEvent?) {
