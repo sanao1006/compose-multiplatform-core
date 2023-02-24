@@ -160,10 +160,10 @@ internal actual class ComposeWindow : UIViewController {
         val skiaLayer = createSkiaLayer()
         val skikoUIView = SkikoUIView(
             skiaLayer = skiaLayer,
-            hitTest = { point: Point, withEvent: UIEvent? ->
-                val isInteropView = layer.scene.mainOwner?.hitInterop(Offset(point.x * density.density, point.y * density.density), true) ?: false
-                !isInteropView
-            },
+//            hitTest = { point: Point, withEvent: UIEvent? ->
+//                val isInteropView = layer.scene.mainOwner?.hitInterop(Offset(point.x * density.density, point.y * density.density), true) ?: false
+//                !isInteropView
+//            },
         ).load()
         val rootView = UIView()
         rootView.addSubview(skikoUIView)
