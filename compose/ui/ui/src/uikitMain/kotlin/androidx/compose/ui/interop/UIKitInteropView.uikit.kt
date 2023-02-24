@@ -165,7 +165,7 @@ import platform.posix.posix_memalign
 
 const val MEASURE_TEXTURE_FPS = false
 const val ON_SIMULATOR = true
-const val BACKGROUND_THREAD = false
+const val BACKGROUND_THREAD = true
 val textureThreadContexts = List(3){newSingleThreadContext("texture-${Random.nextInt()}")}
 
 /**
@@ -176,12 +176,6 @@ val metalResourceStorageMode = if (ON_SIMULATOR) MTLResourceStorageModePrivate e
 val NoOpUpdate: UIView.() -> Unit = {}
 private val device = MTLCreateSystemDefaultDevice()!!//todo hardcode
 
-enum class UseMetalTexture(val use:Boolean, val always: Boolean) {
-    NO(false, false),
-    HOLE(true, false),
-    FULL(true, true);
-}
-
 @Composable
 public fun <T : UIView> UIKitInteropView(
     background: Color = Color.White,
@@ -189,7 +183,7 @@ public fun <T : UIView> UIKitInteropView(
     modifier: Modifier = Modifier,
     update: (T) -> Unit = NoOpUpdate,
     dispose: (T) -> Unit = {},
-    useMetalTexture: UseMetalTexture = UseMetalTexture.NO,
+    useMetalTexture: Boolean = true,
     useAlphaComponent: Boolean = true,
     drawViewHierarchyInRect: Boolean = true,
     useRasterization: Boolean = false,
@@ -210,8 +204,6 @@ public fun <T : UIView> UIKitInteropView(
     var rectInPixels by remember { mutableStateOf(IntRect(0, 0, 0, 0)) }
     var uiViewSize by remember { mutableStateOf(IntSize(0, 0)) }
     var localToWindowOffset: IntOffset by remember { mutableStateOf(IntOffset.Zero) }
-    var offsets: List<IntOffset> by remember { mutableStateOf(listOf()) }
-    var previousDrawBehindOffsets: List<IntOffset> by remember { mutableStateOf(listOf()) }
     var cache: Cache? by remember { mutableStateOf(null) }
     val mtlSkikoImage: Image? = remember(cache?.texture) {
         cache?.texture?.let {
@@ -331,21 +323,10 @@ public fun <T : UIView> UIKitInteropView(
         frameStart = false
     }
     LaunchedEffect(Unit) {
-        val MAX_OFFSETS_SIZE = 4
         withContext2(textureThreadContext) {
-            while (useMetalTexture.use) {
-                if (BACKGROUND_THREAD) {
-                    delay(1)
-                } else {
-                    withFrameNanos { it }
-                }
-                offsets = offsets + localToWindowOffset
-                if (offsets.size > MAX_OFFSETS_SIZE) {
-                    offsets = offsets.subList(1, MAX_OFFSETS_SIZE + 1)
-                }
-                if (useMetalTexture.always || useMetalTexture.use && offsets.dropLast(1).all {it == offsets[0]} && offsets.lastOrNull() != offsets.firstOrNull()) {
-                    updateTexture()
-                }
+            while (useMetalTexture) {
+                withFrameNanos { it }
+                updateTexture()
             }
         }
     }
@@ -363,14 +344,7 @@ public fun <T : UIView> UIKitInteropView(
                 rectInPixels = newRectInPixels
             }
         }.drawBehind {
-            val MAX_SIZE = 9
-            offsets.lastOrNull()?.let {
-                previousDrawBehindOffsets += it
-                if (previousDrawBehindOffsets.size > MAX_SIZE) {
-                    previousDrawBehindOffsets = previousDrawBehindOffsets.subList(1, MAX_SIZE + 1)
-                }
-            }
-            if (useMetalTexture.always || useMetalTexture.use && previousDrawBehindOffsets.size >= MAX_SIZE && !previousDrawBehindOffsets.all { it == previousDrawBehindOffsets[0] }) {
+            if (useMetalTexture) {
                 drawIntoCanvas { canvas->
                     if (mtlSkikoImage != null) {
                         canvas.drawRect(0f, 0f, uiViewSize.width.toFloat(), uiViewSize.height.toFloat(), Paint().apply {
