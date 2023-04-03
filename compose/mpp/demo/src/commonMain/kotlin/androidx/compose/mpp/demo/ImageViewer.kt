@@ -66,7 +66,6 @@ fun ImageViewer() {
     })
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ImageViewer(image: ImageBitmap) {
     val cameraState = remember { CameraState() }
@@ -99,18 +98,6 @@ fun ImageViewer(image: ImageBitmap) {
                             drawImage(image)
                         }
                     }
-                }
-                .pointerInput(Unit) {
-                    detectTransformGestures { centroid, pan, zoom, _ ->
-                        cameraState.addPan(pan)
-                        cameraState.addScale(zoom, centroid - areaCenter)
-                    }
-                }
-                .onPointerEvent(PointerEventType.Scroll) {
-                    val centroid = it.changes[0].position
-                    val delta = it.changes[0].scrollDelta
-                    val zoom = 1.2f.pow(-delta.y)
-                    cameraState.addScale(zoom, centroid - areaCenter)
                 }
                 .pointerInput(Unit) {
                     detectTapGestures(onDoubleTap = { position ->
