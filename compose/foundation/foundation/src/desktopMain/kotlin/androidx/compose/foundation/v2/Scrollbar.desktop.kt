@@ -29,7 +29,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.geometry.Offset
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 
 /**
@@ -413,6 +415,7 @@ internal class SliderAdapter(
     private val minHeight: Float,
     private val reverseLayout: Boolean,
     private val isVertical: Boolean,
+    private val coroutineScope: CoroutineScope
 ) {
 
     private val contentSize get() = adapter.contentSize
@@ -435,23 +438,11 @@ internal class SliderAdapter(
             return if (extraContentSpace == 0.0) 1.0 else extraScrollbarSpace / extraContentSpace
         }
 
-    private var rawPosition: Double
+    private val rawPosition: Double
         get() = scrollScale * adapter.scrollOffset
-        set(value) {
-            runBlocking {
-                adapter.scrollTo(value / scrollScale)
-            }
-        }
 
-    var position: Double
+    val position: Double
         get() = if (reverseLayout) trackSize - thumbSize - rawPosition else rawPosition
-        set(value) {
-            rawPosition = if (reverseLayout) {
-                trackSize - thumbSize - value
-            } else {
-                value
-            }
-        }
 
     val bounds get() = position..position + thumbSize
 
@@ -463,19 +454,39 @@ internal class SliderAdapter(
         unscrolledDragDistance = 0.0
     }
 
+    private suspend fun setRawPosition(value: Double) {
+        adapter.scrollTo(value / scrollScale)
+    }
+
+    private val setRawPositionMutex = Mutex()
+
     /** Called on every movement while dragging the thumb */
     fun onDragDelta(offset: Offset) {
-        val dragDelta = if (isVertical) offset.y else offset.x
-        val maxScrollPosition = adapter.maxScrollOffset * scrollScale
-        val currentPosition = position
-        val targetPosition =
-            (currentPosition + dragDelta + unscrolledDragDistance).coerceIn(0.0, maxScrollPosition)
-        val sliderDelta = targetPosition - currentPosition
+        coroutineScope.launch {
+            // Mutex is used to ensure that all earlier drag deltas were applied
+            // before calculating a new raw position
+            setRawPositionMutex.withLock {
+                val dragDelta = if (isVertical) offset.y else offset.x
+                val maxScrollPosition = adapter.maxScrollOffset * scrollScale
+                val currentPosition = position
+                val targetPosition =
+                    (currentPosition + dragDelta + unscrolledDragDistance).coerceIn(
+                        0.0,
+                        maxScrollPosition
+                    )
+                val sliderDelta = targetPosition - currentPosition
 
-        // Have to add to position for smooth content scroll if the items are of different size
-        position += sliderDelta
-
-        unscrolledDragDistance += dragDelta - sliderDelta
+                // Have to add to position for smooth content scroll if the items are of different size
+                val newPos = position + sliderDelta
+                val newRaw = if (reverseLayout) {
+                    trackSize - thumbSize - newPos
+                } else {
+                    newPos
+                }
+                setRawPosition(newRaw)
+                unscrolledDragDistance += dragDelta - sliderDelta
+            }
+        }
     }
 
 }
