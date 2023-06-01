@@ -33,15 +33,9 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.ReusableGraphicsLayerScope
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.layout.AlignmentLine
-import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.*
 import androidx.compose.ui.layout.LookaheadLayoutCoordinatesImpl
 import androidx.compose.ui.layout.LookaheadScope
-import androidx.compose.ui.layout.Measurable
-import androidx.compose.ui.layout.MeasureResult
-import androidx.compose.ui.layout.Placeable
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.outerSemantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -353,6 +347,10 @@ internal abstract class NodeCoordinator(
      * Draws the content of the LayoutNode
      */
     fun draw(canvas: Canvas) {
+        val bounds = coordinates.boundsInWindow()
+        if (bounds == Rect.Zero) {
+            return
+        }
         val layer = layer
         if (layer != null) {
             layer.drawLayer(canvas)

@@ -132,7 +132,7 @@ fun LayoutCoordinates.boundsInRoot(): Rect =
  */
 fun LayoutCoordinates.boundsInWindow(): Rect {
     val root = findRootCoordinates()
-    val bounds = boundsInRoot()
+    val bounds = root.localBoundingBoxOf(this)
     val rootWidth = root.size.width.toFloat()
     val rootHeight = root.size.height.toFloat()
     val boundsLeft = bounds.left.coerceIn(0f, rootWidth)
