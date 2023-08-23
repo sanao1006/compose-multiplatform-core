@@ -33,7 +33,23 @@ import org.gradle.kotlin.dsl.creating
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.getValue
 import org.jetbrains.kotlin.konan.target.KonanTarget
-
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.DependencyConstraint
+import org.gradle.api.artifacts.ExcludeRule
+import org.gradle.api.artifacts.ModuleDependency
+import org.gradle.api.artifacts.ModuleVersionIdentifier
+import org.gradle.api.artifacts.PublishArtifact
+import org.gradle.api.attributes.AttributeContainer
+import org.gradle.api.attributes.Usage
+import org.gradle.api.capabilities.Capability
+import org.gradle.api.component.ComponentWithCoordinates
+import org.gradle.api.component.ComponentWithVariants
+import org.gradle.api.component.SoftwareComponent
+import org.gradle.api.internal.component.SoftwareComponentInternal
+import org.gradle.api.internal.component.UsageContext
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
+import org.gradle.kotlin.dsl.create
 import org.jetbrains.kotlin.gradle.targets.js.dsl.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest
 import org.tomlj.Toml
@@ -274,11 +290,16 @@ open class AndroidXComposeMultiplatformExtensionImpl @Inject constructor(
     }
 }
 
-fun Project.experimentalOELPublication() : Boolean = findProperty("oel.publication") == "true"
-fun Project.oelAndroidxVersion() : String? = findProperty("oel.androidx.version") as String?
-fun Project.oelAndroidxFoundationVersion() : String? = findProperty("oel.androidx.foundation.version") as String?
-fun Project.oelAndroidxMaterial3Version() : String? = findProperty("oel.androidx.material3.version") as String?
-fun Project.oelAndroidxMaterialVersion() : String? = findProperty("oel.androidx.material.version") as String?
+fun Project.experimentalOELPublication(): Boolean = findProperty("oel.publication") == "true"
+fun Project.oelAndroidxVersion(): String? = findProperty("oel.androidx.version") as String?
+fun Project.oelAndroidxFoundationVersion(): String? =
+    findProperty("oel.androidx.foundation.version") as String?
+
+fun Project.oelAndroidxMaterial3Version(): String? =
+    findProperty("oel.androidx.material3.version") as String?
+
+fun Project.oelAndroidxMaterialVersion(): String? =
+    findProperty("oel.androidx.material.version") as String?
 
 fun enableOELPublishing(project: Project) {
     if (!project.experimentalOELPublication()) return
@@ -296,26 +317,137 @@ fun enableOELPublishing(project: Project) {
     }
 }
 
-// FIXME: reflection access! Some API in Kotlin is needed
-@Suppress("unchecked_cast")
-private val KotlinTarget.kotlinComponents: Iterable<KotlinTargetComponent>
-    get() = javaClass.kotlin.memberProperties
-        .single { it.name == "kotlinComponents" }
-        .get(this) as Iterable<KotlinTargetComponent>
-
+@Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
+private typealias SetOfKotlinUsageContextFuture =
+    org.jetbrains.kotlin.gradle.utils.Future<Set<DefaultKotlinUsageContext>>
 
 @Suppress("unchecked_cast")
-private fun Project.publishAndroidxReference(target: KotlinTarget) {
+private val KotlinSoftwareComponent._usages: SetOfKotlinUsageContextFuture
+    get() = this::class.java.superclass.getDeclaredField("_usages")
+        .also { it.isAccessible = true }
+        .get(this) as SetOfKotlinUsageContextFuture
+
+
+/**
+ * Usage that should be added to rootSoftwareComponent to represent android-specific variants
+ * It will be serialized to *.module in "variants" collection.
+ */
+private class FakeAndroidUsage(
+    private val name: String,
+    private val attributes: AttributeContainer,
+    private val dependencies: Set<ModuleDependency>
+) : UsageContext {
+    override fun getName(): String = name
+    override fun getArtifacts(): Set<PublishArtifact> = emptySet()
+    override fun getAttributes(): AttributeContainer = attributes
+    override fun getCapabilities(): Set<Capability> = emptySet()
+    override fun getDependencies(): Set<ModuleDependency> = dependencies
+    override fun getDependencyConstraints(): Set<DependencyConstraint> = emptySet()
+    override fun getGlobalExcludes(): Set<ExcludeRule> = emptySet()
+    override fun getUsage(): Usage = error("Should not be accessed!")
+}
+
+private fun Project.publishAndroidxReference(target: KotlinAndroidTarget) {
     afterEvaluate {
+        // Take root component which should contain "variants" (aka usages)
+        // this component gets published as "main/common" module
+        // that we want to add as android ones.
+        val rootComponent = target.project
+            .components
+            .withType(KotlinSoftwareComponentWithCoordinatesAndPublication::class.java)
+            .getByName("kotlin")
+
+        val composeVersion = requireNotNull(target.project.oelAndroidxVersion()) {
+            "Please specify oel.androidx.version property"
+        }
+        val material3Version =
+            requireNotNull(target.project.oelAndroidxMaterial3Version()) {
+                "Please specify oel.androidx.material3.version property"
+            }
+        val foundationVersion =
+            target.project.oelAndroidxFoundationVersion() ?: composeVersion
+        val materialVersion =
+            target.project.oelAndroidxMaterialVersion() ?: composeVersion
+
+        val groupId = target.project.group.toString()
+        val version = if (groupId.contains("org.jetbrains.compose.material3")) {
+            material3Version
+        } else if (groupId.contains("org.jetbrains.compose.foundation")) {
+            foundationVersion
+        } else if (groupId.contains("org.jetbrains.compose.material")) {
+            materialVersion
+        } else {
+            composeVersion
+        }
+        val dependencyGroup = target.project.group.toString().replace(
+            "org.jetbrains.compose",
+            "androidx.compose"
+        )
+        val newDependency = target.project.dependencies.create(dependencyGroup, name, version)
+
+
+        // We can't add more usages to rootComponent, so we must decorate it
+        val newRootComponent = object :
+            SoftwareComponentInternal,
+            ComponentWithVariants,
+            ComponentWithCoordinates {
+            override fun getName(): String = "kotlin2"
+            override fun getVariants(): Set<SoftwareComponent> = rootComponent.variants
+            override fun getCoordinates(): ModuleVersionIdentifier =
+                rootComponent.coordinates
+
+            override fun getUsages(): Set<UsageContext> = rootComponent.usages + extraUsages
+
+            private val extraUsages = mutableSetOf<UsageContext>()
+
+            fun addUsageFromConfiguration(configuration: Configuration) {
+                extraUsages.add(
+                    FakeAndroidUsage(
+                        name = configuration.name,
+                        attributes = configuration.attributes,
+                        dependencies = setOf(newDependency)
+                    )
+                )
+            }
+        }
+
+        extensions.getByType(PublishingExtension::class.java).apply {
+            val kotlinMultiplatform = publications
+                .getByName("kotlinMultiplatform") as MavenPublication
+
+            publications.create("kotlinMultiplatform2", MavenPublication::class.java) {
+                it.artifactId = kotlinMultiplatform.artifactId
+                it.groupId = kotlinMultiplatform.groupId
+                it.version = kotlinMultiplatform.version
+
+                it.from(newRootComponent)
+            }
+        }
+
+        // Disable all publication tasks that uses OLD rootSoftwareComponent: we don't want to
+        // accidentally publish two "root" components
+        tasks.withType(AbstractPublishToMaven::class.java).configureEach {
+            if (it.publication.name == "kotlinMultiplatform") it.enabled = false
+        }
+
         target.kotlinComponents.forEach { component ->
             val componentName = component.name
 
-            val multiplatformExtension =
-                extensions.findByType(KotlinMultiplatformExtension::class.java)
-                    ?: error("Expected a multiplatform project")
-
             if (component is KotlinVariant)
                 component.publishable = false
+
+            extensions.getByType(PublishingExtension::class.java)
+                .publications.withType(DefaultMavenPublication::class.java)
+                    // isAlias is needed for Gradle to ignore the fact that there's a
+                    // publication that is not referenced as an available-at variant of the root module
+                    // and has the Maven coordinates that are different from those of the root module
+                    // FIXME: internal Gradle API! We would rather not create the publications,
+                    //        but some API for that is needed in the Kotlin Gradle plugin
+                    .all { publication ->
+                        if (publication.name == componentName) {
+                            publication.isAlias = true
+                        }
+                    }
 
             val usages = when (component) {
                 is KotlinVariant -> component.usages
@@ -323,59 +455,15 @@ private fun Project.publishAndroidxReference(target: KotlinTarget) {
                 else -> emptyList()
             }
 
-            extensions.getByType(PublishingExtension::class.java)
-                .publications.withType(DefaultMavenPublication::class.java)
-                // isAlias is needed for Gradle to ignore the fact that there's a
-                // publication that is not referenced as an available-at variant of the root module
-                // and has the Maven coordinates that are different from those of the root module
-                // FIXME: internal Gradle API! We would rather not create the publications,
-                //        but some API for that is needed in the Kotlin Gradle plugin
-                .all { publication ->
-                    if (publication.name == componentName) {
-                        publication.isAlias = true
-                    }
-                }
-
-            usages.forEach {    usage ->
+            usages.forEach { usage ->
+                // Use -published configuration because it would have correct attribute set
+                // required for publication.
                 val configurationName = usage.name + "-published"
 
-                configurations.matching{it.name == configurationName}.all() { conf ->
-                    conf.artifacts.clear()
-                    conf.dependencies.clear()
-                    conf.setExtendsFrom(emptyList())
-                    val composeVersion = requireNotNull(target.project.oelAndroidxVersion()) {
-                        "Please specify oel.androidx.version property"
-                    }
-                    val material3Version = requireNotNull(target.project.oelAndroidxMaterial3Version()) {
-                        "Please specify oel.androidx.material3.version property"
-                    }
-                    val foundationVersion = target.project.oelAndroidxFoundationVersion() ?: composeVersion
-                    val materialVersion = target.project.oelAndroidxMaterialVersion() ?: composeVersion
-
-                    val groupId = target.project.group.toString()
-                    val version = if (groupId.contains("org.jetbrains.compose.material3")) {
-                        material3Version
-                    } else if (groupId.contains("org.jetbrains.compose.foundation")) {
-                        foundationVersion
-                    } else if (groupId.contains("org.jetbrains.compose.material")){
-                        materialVersion
-                    } else {
-                        composeVersion
-                    }
-                    val newDependency = target.project.group.toString().replace("org.jetbrains.compose", "androidx.compose") + ":" + name + ":" + version
-                    conf.dependencies.add(target.project.dependencies.create(newDependency))
+                //
+                configurations.matching { it.name == configurationName }.all { conf ->
+                    newRootComponent.addUsageFromConfiguration(conf)
                 }
-
-                val rootComponent : KotlinSoftwareComponent = target.project.components.withType(KotlinSoftwareComponent::class.java)
-                    .getByName("kotlin")
-
-//                (rootComponent.usages as MutableSet).add(
-//                    DefaultKotlinUsageContext(
-//                        multiplatformExtension.metadata().compilations.getByName("main"),
-//                        KotlinUsageContext.MavenScope.COMPILE,
-//                        configurationName
-//                    )
-//                )
             }
         }
     }

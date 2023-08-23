@@ -36,7 +36,7 @@ abstract class AbstractComposePublishingTask : DefaultTask() {
     }
 
     fun publishMultiplatform(component: ComposeComponent) {
-        dependsOnComposeTask("${component.path}:publish${ComposePlatforms.KotlinMultiplatform.name}PublicationTo$repository")
+        dependsOnComposeTask("${component.path}:publish${ComposePlatforms.KotlinMultiplatform.name}2PublicationTo$repository")
 
         for (platform in targetPlatforms) {
             if (platform !in component.supportedPlatforms) continue
