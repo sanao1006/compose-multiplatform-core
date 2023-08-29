@@ -156,6 +156,22 @@ internal class TextFieldSelectionManager(
      */
     private var oldValue: TextFieldValue = TextFieldValue()
 
+    internal fun doSelection(point: Offset) {
+        if (value.text.isEmpty()) return
+        enterSelectionMode()
+        state?.layoutResult?.let { layoutResult ->
+            val offset = layoutResult.getOffsetForPosition(point)
+            updateSelection(
+                value = value,
+                transformedStartOffset = offset,
+                transformedEndOffset = offset,
+                isStartHandle = false,
+                adjustment = SelectionAdjustment.Word
+            )
+            dragBeginOffsetInText = offset
+        }
+    }
+
     /**
      * [TextDragObserver] for long press and drag to select in TextField.
      */

@@ -18,6 +18,7 @@ package androidx.compose.foundation.text
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.Interaction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -346,8 +347,7 @@ internal fun CoreTextField(
     }
 
     val pointerModifier = if (isInTouchMode) {
-        val selectionModifier =
-            Modifier.longPressDragGestureFilter(manager.touchSelectionObserver, enabled)
+        val selectionModifier: Modifier = getTextSelectionModifier(manager, enabled)
         Modifier
             .tapPressTextFieldModifier(interactionSource, enabled) { offset ->
                 tapToFocus(state, focusRequester, !readOnly)
