@@ -1,0 +1,59 @@
+/*
+ * Copyright 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.compose.foundation.text
+
+import androidx.compose.foundation.text.selection.TextFieldSelectionManager
+import androidx.compose.ui.Modifier
+
+internal actual fun getTextSelectionModifier(manager: TextFieldSelectionManager, enabled: Boolean, onTap: () -> Unit) =
+    Modifier.longPressDragGestureFilter(manager.touchSelectionObserver, enabled)
+//TODO check in AOSP
+
+@OptIn(InternalFoundationTextApi::class)
+internal fun getTextTouchModifier(state: TextFieldState,
+    interactionSource: MutableInteractionSource?,
+    manager: TextFieldSelectionManager,
+    offsetMapping: OffsetMapping,
+    enabled: Boolean): Modifier {
+    if (enabled) {
+        return Modifier.tapPressTextFieldModifier(interactionSource, enabled) { offset ->
+            if (state.hasFocus) {
+                if (state.handleState != HandleState.Selection) {
+                    state.layoutResult?.let { layoutResult ->
+                        TextFieldDelegate.setCursorOffset(
+                            offset,
+                            layoutResult,
+                            state.processor,
+                            offsetMapping,
+                            state.onValueChange
+                        )
+                        println("cursorSet")
+                        // Won't enter cursor state when text is empty.
+                        if (state.textDelegate.text.isNotEmpty()) {
+                            state.handleState = HandleState.Cursor
+                        }
+                    }
+                } else {
+                    manager.deselect(offset)
+                }
+            }
+        }
+    } else {
+        return Modifier
+    }
+}
+//TODO check in AOSP

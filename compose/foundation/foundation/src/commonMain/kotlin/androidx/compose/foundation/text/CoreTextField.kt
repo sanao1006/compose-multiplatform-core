@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
@@ -347,30 +348,16 @@ internal fun CoreTextField(
     }
 
     val pointerModifier = if (isInTouchMode) {
-        val selectionModifier: Modifier = getTextSelectionModifier(manager, enabled)
+        val selectionModifier: Modifier = getTextSelectionModifier(manager, enabled) {
+            tapToFocus(state, focusRequester, !readOnly)
+        }
+        val touchModifier = getTextTouchModifier(state = state,
+            interactionSource = interactionSource,
+            manager = manager,
+            offsetMapping = offsetMapping,
+            enabled = enabled)
         Modifier
-            .tapPressTextFieldModifier(interactionSource, enabled) { offset ->
-                tapToFocus(state, focusRequester, !readOnly)
-                if (state.hasFocus) {
-                    if (state.handleState != HandleState.Selection) {
-                        state.layoutResult?.let { layoutResult ->
-                            TextFieldDelegate.setCursorOffset(
-                                offset,
-                                layoutResult,
-                                state.processor,
-                                offsetMapping,
-                                state.onValueChange
-                            )
-                            // Won't enter cursor state when text is empty.
-                            if (state.textDelegate.text.isNotEmpty()) {
-                                state.handleState = HandleState.Cursor
-                            }
-                        }
-                    } else {
-                        manager.deselect(offset)
-                    }
-                }
-            }
+            .then(touchModifier)
             .then(selectionModifier)
             .pointerHoverIcon(textPointerIcon)
     } else {

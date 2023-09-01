@@ -16,9 +16,15 @@
 
 package androidx.compose.foundation.text
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.selection.TextFieldSelectionManager
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.OffsetMapping
 
-internal actual fun getTextSelectionModifier(manager: TextFieldSelectionManager, enabled: Boolean) =
-    Modifier.longPressDragGestureFilter(manager.touchSelectionObserver, enabled)
-//TODO check in AOSP
+internal expect fun getTextSelectionModifier(manager: TextFieldSelectionManager, enabled: Boolean, onTap: () -> Unit): Modifier
+
+internal expect fun getTextTouchModifier(state: TextFieldState,
+    interactionSource: MutableInteractionSource?,
+    manager: TextFieldSelectionManager,
+    offsetMapping: OffsetMapping,
+    enabled: Boolean): Modifier
