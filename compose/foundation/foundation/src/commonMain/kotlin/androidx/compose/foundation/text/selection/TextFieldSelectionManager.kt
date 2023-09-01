@@ -20,9 +20,7 @@ import androidx.compose.foundation.text.DefaultCursorThickness
 import androidx.compose.foundation.text.Handle
 import androidx.compose.foundation.text.HandleState
 import androidx.compose.foundation.text.InternalFoundationTextApi
-import androidx.compose.foundation.text.TextDragAndTapObserver
 import androidx.compose.foundation.text.TextDragObserver
-import androidx.compose.foundation.text.TextFieldDelegate
 import androidx.compose.foundation.text.TextFieldState
 import androidx.compose.foundation.text.UndoManager
 import androidx.compose.foundation.text.ValidatingEmptyOffsetMappingIdentity
@@ -41,7 +39,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.AnnotatedString
@@ -159,21 +156,6 @@ internal class TextFieldSelectionManager(
      */
     private var oldValue: TextFieldValue = TextFieldValue()
 
-    internal fun doSelection(point: Offset) {
-        if (value.text.isEmpty()) return
-        enterSelectionMode()
-        state?.layoutResult?.let { layoutResult ->
-            val offset = layoutResult.getOffsetForPosition(point)
-            updateSelection(
-                value = value,
-                transformedStartOffset = offset,
-                transformedEndOffset = offset,
-                isStartHandle = false,
-                adjustment = SelectionAdjustment.Word
-            )
-            dragBeginOffsetInText = offset
-        }
-    }
     /**
      * [TextDragObserver] for long press and drag to select in TextField.
      */

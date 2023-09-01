@@ -27,15 +27,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
-internal interface TextDragAndTapObserver {
-    fun onTap(startPoint: Offset)
-    fun onDoubleTap(startPoint: Offset)
-    fun onStart(startPoint: Offset)
-    fun onDrag(delta: Offset)
-    fun onStop()
-    fun onCancel()
-}
-
 internal interface TextDragObserver {
     /**
      * Called as soon as a down event is received. If the pointer eventually moves while remaining
