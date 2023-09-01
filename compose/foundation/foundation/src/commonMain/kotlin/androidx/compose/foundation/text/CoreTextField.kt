@@ -346,38 +346,11 @@ internal fun CoreTextField(
     }
 
     val pointerModifier = if (isInTouchMode) {
-        val selectionModifier = Modifier.longPressDragGestureFilter(manager.touchSelectionObserver, enabled)
-        val touchModifier = Modifier.tapPressTextFieldModifier(
-            interactionSource = interactionSource,
-            enabled =  enabled,
-            onTap = { offset: Offset ->
-                tapToFocus(state, focusRequester, !readOnly)
-                if (state.hasFocus) {
-                    if (state.handleState != HandleState.Selection) {
-                        state.layoutResult?.let { layoutResult ->
-                            TextFieldDelegate.setCursorOffset(
-                                offset,
-                                layoutResult,
-                                state.processor,
-                                offsetMapping,
-                                state.onValueChange
-                            )
-                            // Won't enter cursor state when text is empty.
-                            if (state.textDelegate.text.isNotEmpty()) {
-                                state.handleState = HandleState.Cursor
-                            }
-                        }
-                    } else {
-                        manager.deselect(offset)
-                    }
-                }
-            },
-            onDoubleTap = {
-                tapToFocus(state, focusRequester, !readOnly)
-                manager.doDoubleTapSelection(it)
-            })
+        val selectionModifier =
+            Modifier.longPressDragGestureFilter(manager.touchSelectionObserver, enabled)
+
         Modifier
-            .then(touchModifier)
+            .customModifier(manager, state, focusRequester, readOnly, enabled, interactionSource, offsetMapping)
             .then(selectionModifier)
             .pointerHoverIcon(textPointerIcon)
     } else {
@@ -1137,3 +1110,42 @@ private fun notifyFocusedRect(
         )
     }
 }
+
+
+@OptIn(InternalFoundationTextApi::class)
+internal fun Modifier.customModifier(
+    manager: TextFieldSelectionManager,
+    state: TextFieldState,
+    focusRequester: FocusRequester,
+    readOnly: Boolean,
+    enabled: Boolean,
+    interactionSource: MutableInteractionSource?,
+    offsetMapping: OffsetMapping
+) = tapPressTextFieldModifier(interactionSource, enabled,
+    onTap = { offset: Offset ->
+        tapToFocus(state, focusRequester, !readOnly)
+        if (state.hasFocus) {
+            if (state.handleState != HandleState.Selection) {
+                state.layoutResult?.let { layoutResult ->
+                    TextFieldDelegate.setCursorOffset(
+                        offset,
+                        layoutResult,
+                        state.processor,
+                        offsetMapping,
+                        state.onValueChange
+                    )
+                    // Won't enter cursor state when text is empty.
+                    if (state.textDelegate.text.isNotEmpty()) {
+                        state.handleState = HandleState.Cursor
+                    }
+                }
+            } else {
+                manager.deselect(offset)
+            }
+        }
+    },
+    onDoubleTap = {
+        tapToFocus(state, focusRequester, !readOnly)
+        manager.doDoubleTapSelection(it)
+    }
+)

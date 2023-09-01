@@ -85,6 +85,7 @@ internal fun Modifier.tapPressTextFieldModifier(
         detectTapGestures(
             onPress = if (pressSelectionEnabled) { onPressHandler } else { {} },
             onTap = { onTapState.value.invoke(it) },
-            onDoubleTap = if (doubleTapSelectionEnabled) { onDoubleTap } else { {} })
+            onDoubleTap = if (doubleTapSelectionEnabled) { onDoubleTap } else { {} }
+        )
     }
 } else this
