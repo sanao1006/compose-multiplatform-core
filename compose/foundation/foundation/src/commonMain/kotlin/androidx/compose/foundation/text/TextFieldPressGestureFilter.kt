@@ -16,9 +16,7 @@
 
 package androidx.compose.foundation.text
 
-import androidx.compose.foundation.gestures.PressGestureScope
 import androidx.compose.foundation.gestures.detectTapAndPress
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.DisposableEffect
@@ -38,8 +36,7 @@ import kotlinx.coroutines.launch
 internal fun Modifier.tapPressTextFieldModifier(
     interactionSource: MutableInteractionSource?,
     enabled: Boolean = true,
-    onTap: (Offset) -> Unit,
-    onDoubleTap: (Offset) -> Unit
+    onTap: (Offset) -> Unit
 ): Modifier = if (enabled) composed {
     val scope = rememberCoroutineScope()
     val pressedInteraction = remember { mutableStateOf<PressInteraction.Press?>(null) }
@@ -54,38 +51,34 @@ internal fun Modifier.tapPressTextFieldModifier(
         }
     }
     Modifier.pointerInput(interactionSource) {
-
-        val onPressHandler: suspend PressGestureScope.(Offset) -> Unit = {
-            scope.launch {
-                // Remove any old interactions if we didn't fire stop / cancel properly
-                pressedInteraction.value?.let { oldValue ->
-                    val interaction = PressInteraction.Cancel(oldValue)
+        detectTapAndPress(
+            onPress = {
+                scope.launch {
+                    // Remove any old interactions if we didn't fire stop / cancel properly
+                    pressedInteraction.value?.let { oldValue ->
+                        val interaction = PressInteraction.Cancel(oldValue)
+                        interactionSource?.emit(interaction)
+                        pressedInteraction.value = null
+                    }
+                    val interaction = PressInteraction.Press(it)
                     interactionSource?.emit(interaction)
-                    pressedInteraction.value = null
+                    pressedInteraction.value = interaction
                 }
-                val interaction = PressInteraction.Press(it)
-                interactionSource?.emit(interaction)
-                pressedInteraction.value = interaction
-            }
-            val success = tryAwaitRelease()
-            scope.launch {
-                pressedInteraction.value?.let { oldValue ->
-                    val interaction =
-                        if (success) {
-                            PressInteraction.Release(oldValue)
-                        } else {
-                            PressInteraction.Cancel(oldValue)
-                        }
-                    interactionSource?.emit(interaction)
-                    pressedInteraction.value = null
+                val success = tryAwaitRelease()
+                scope.launch {
+                    pressedInteraction.value?.let { oldValue ->
+                        val interaction =
+                            if (success) {
+                                PressInteraction.Release(oldValue)
+                            } else {
+                                PressInteraction.Cancel(oldValue)
+                            }
+                        interactionSource?.emit(interaction)
+                        pressedInteraction.value = null
+                    }
                 }
-            }
-        }
-
-        detectTapGestures(
-            onPress = if (pressSelectionEnabled) { onPressHandler } else { {} },
-            onTap = { onTapState.value.invoke(it) },
-            onDoubleTap = if (doubleTapSelectionEnabled) { onDoubleTap } else { {} }
+            },
+            onTap = { onTapState.value.invoke(it) }
         )
     }
 } else this
