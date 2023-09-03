@@ -17,6 +17,7 @@
 package androidx.compose.foundation.text
 
 import androidx.compose.foundation.gestures.PressGestureScope
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -35,7 +36,7 @@ import androidx.compose.ui.text.input.OffsetMapping
 import kotlinx.coroutines.launch
 
 @OptIn(InternalFoundationTextApi::class)
-internal actual fun Modifier.focusBehavior(
+internal actual fun Modifier.focusAndSelectionBehavior(
     manager: TextFieldSelectionManager,
     state: TextFieldState,
     focusRequester: FocusRequester,
@@ -43,34 +44,50 @@ internal actual fun Modifier.focusBehavior(
     enabled: Boolean,
     interactionSource: MutableInteractionSource?,
     offsetMapping: OffsetMapping
-) = tapPressTextFieldModifier2(interactionSource, enabled,
-    onTap = { offset: Offset ->
-        tapToFocus(state, focusRequester, !readOnly)
-        if (state.hasFocus) {
-            if (state.handleState != HandleState.Selection) {
-                state.layoutResult?.let { layoutResult ->
-                    TextFieldDelegate.setCursorOffset(
-                        offset,
-                        layoutResult,
-                        state.processor,
-                        offsetMapping,
-                        state.onValueChange
-                    )
-                    // Won't enter cursor state when text is empty.
-                    if (state.textDelegate.text.isNotEmpty()) {
-                        state.handleState = HandleState.Cursor
+) =
+    tapPressTextFieldModifier2(
+        interactionSource, enabled,
+        onTap = { offset: Offset ->
+            tapToFocus(state, focusRequester, !readOnly)
+            if (state.hasFocus) {
+                if (state.handleState != HandleState.Selection) {
+                    state.layoutResult?.let { layoutResult ->
+                        TextFieldDelegate.setCursorOffset(
+                            offset,
+                            layoutResult,
+                            state.processor,
+                            offsetMapping,
+                            state.onValueChange
+                        )
+                        // Won't enter cursor state when text is empty.
+                        if (state.textDelegate.text.isNotEmpty()) {
+                            state.handleState = HandleState.Cursor
+                        }
                     }
+                } else {
+                    manager.deselect(offset)
                 }
-            } else {
-                manager.deselect(offset)
             }
+        },
+        onDoubleTap = {
+            tapToFocus(state, focusRequester, !readOnly)
+            manager.doDoubleTapSelection(it)
         }
-    },
-    onDoubleTap = {
-        tapToFocus(state, focusRequester, !readOnly)
-        manager.doDoubleTapSelection(it)
+    ).pointerInput(Unit) {
+        detectDragGesturesAfterLongPress(
+            onDragEnd = {
+                manager.touchSelectionObserver
+                    .onStop()
+            },
+            onDrag = { _, offset ->
+                manager.touchSelectionObserver.onDrag(offset)
+            },
+            onDragStart = {
+                manager.touchSelectionObserver.onStart(it)
+            },
+            onDragCancel = { manager.touchSelectionObserver.onCancel() }
+        )
     }
-)
 
 
 /**
@@ -80,7 +97,7 @@ private fun Modifier.tapPressTextFieldModifier2(
     interactionSource: MutableInteractionSource?,
     enabled: Boolean = true,
     onTap: (Offset) -> Unit,
-    onDoubleTap: (Offset) -> Unit
+    onDoubleTap: (Offset) -> Unit,
 ): Modifier = if (enabled) composed {
     val scope = rememberCoroutineScope()
     val pressedInteraction = remember { mutableStateOf<PressInteraction.Press?>(null) }
@@ -126,18 +143,7 @@ private fun Modifier.tapPressTextFieldModifier2(
         detectTapGestures(
             onPress = if (pressSelectionEnabled) { onPressHandler } else { {} },
             onTap = { onTapState.value.invoke(it) },
-            onDoubleTap = if (doubleTapSelectionEnabled) { onDoubleTap } else { {} }
+            onDoubleTap = onDoubleTap
         )
     }
 } else this
-
-
-internal actual fun Modifier.selectionBehavior(
-    manager: TextFieldSelectionManager,
-    state: TextFieldState,
-    focusRequester: FocusRequester,
-    readOnly: Boolean,
-    enabled: Boolean,
-    interactionSource: MutableInteractionSource?,
-    offsetMapping: OffsetMapping
-): Modifier = longPressDragGestureFilter(manager.touchSelectionObserver, enabled)

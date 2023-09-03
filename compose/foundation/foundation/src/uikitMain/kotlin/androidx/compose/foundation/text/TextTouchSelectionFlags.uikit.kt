@@ -16,5 +16,5 @@
 
 package androidx.compose.foundation.text
 
-internal actual val pressSelectionEnabled: Boolean = false
+internal actual val pressSelectionEnabled: Boolean = true
 internal actual val doubleTapSelectionEnabled: Boolean = true

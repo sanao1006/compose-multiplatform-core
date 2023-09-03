@@ -52,7 +52,7 @@ private fun AlmostFullscreen() {
         mutableStateOf(
             buildString {
                 repeat(100) {
-                    appendLine("Text line $it")
+                    appendLine("Text line $it. With some long text.")
                 }
             }
         )
