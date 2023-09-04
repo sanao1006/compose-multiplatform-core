@@ -21,18 +21,9 @@ import androidx.compose.foundation.gestures.PressGestureScope
 import androidx.compose.foundation.gestures.PressGestureScopeImpl
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.text.selection.TextFieldSelectionManager
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
@@ -180,13 +171,13 @@ private suspend fun AwaitPointerEventScope.awaitSecondDown2(
 }
 
 fun PointerEvent.consume2() {
-
+    // I removed consume. It needs to proper focus request after the selection will applies
 }
 
 fun PointerInputChange.consume2() {
-
+    // I removed consume. It needs to proper focus request after the selection will applies
 }
 
 fun consumeUntilUp2() {
-
+    // I removed consume. It needs to proper focus request after the selection will applies
 }
