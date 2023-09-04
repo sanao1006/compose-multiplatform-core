@@ -79,7 +79,7 @@ private suspend fun PointerInputScope.detectTapGestures2(
         try {
             // wait for first tap up or long press
             upOrCancel = withTimeout(longPressTimeout) {
-                val insideWaitTimeout = waitForUpOrCancellation(PointerEventPass.Initial)
+                val insideWaitTimeout = waitForUpOrCancellation()
                 println("insideWaitTimeout: $insideWaitTimeout")
                 insideWaitTimeout
             }
@@ -107,7 +107,7 @@ private suspend fun PointerInputScope.detectTapGestures2(
                 onTap?.invoke(upOrCancel.position) // no need to check for double-tap.
             } else {
                 // check for second tap
-                val secondDown = awaitSecondDown2(upOrCancel, PointerEventPass.Initial)
+                val secondDown = awaitSecondDown2(upOrCancel)
                 println("secondDown: $secondDown")
                 if (secondDown == null) {
                     onTap?.invoke(upOrCancel.position) // no valid second tap started
@@ -123,7 +123,7 @@ private suspend fun PointerInputScope.detectTapGestures2(
                     try {
                         // Might have a long second press as the second tap
                         withTimeout(longPressTimeout) {
-                            val secondUp = waitForUpOrCancellation(PointerEventPass.Initial)
+                            val secondUp = waitForUpOrCancellation()
                             if (secondUp != null) {
                                 secondUp.consume2()
                                 launch {
@@ -157,13 +157,12 @@ private suspend fun PointerInputScope.detectTapGestures2(
 
 private suspend fun AwaitPointerEventScope.awaitSecondDown2(
     firstUp: PointerInputChange,
-    pass: PointerEventPass = PointerEventPass.Main,
 ): PointerInputChange? = withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
     val minUptime = firstUp.uptimeMillis + viewConfiguration.doubleTapMinTimeMillis
     var change: PointerInputChange
     // The second tap doesn't count if it happens before DoubleTapMinTime of the first tap
     do {
-        val awaitFirstDown = awaitFirstDown(requireUnconsumed = false, pass = pass)
+        val awaitFirstDown = awaitFirstDown(requireUnconsumed = false)
         println("awaitFirstDown: $awaitFirstDown")
         change = awaitFirstDown
     } while (change.uptimeMillis < minUptime)
