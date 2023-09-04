@@ -346,8 +346,31 @@ internal fun CoreTextField(
     }
 
     val pointerModifier = if (isInTouchMode) {
+        val selectionModifier = Modifier.getTextFieldSelectionModifier(manager, enabled, state, focusRequester, readOnly)
         Modifier
-            .focusAndSelectionBehavior(manager, state, focusRequester, readOnly, enabled, interactionSource, offsetMapping)
+            .tapPressTextFieldModifier(interactionSource, enabled) { offset ->
+                tapToFocus(state, focusRequester, !readOnly)
+                if (state.hasFocus) {
+                    if (state.handleState != HandleState.Selection) {
+                        state.layoutResult?.let { layoutResult ->
+                            TextFieldDelegate.setCursorOffset(
+                                offset,
+                                layoutResult,
+                                state.processor,
+                                offsetMapping,
+                                state.onValueChange
+                            )
+                            // Won't enter cursor state when text is empty.
+                            if (state.textDelegate.text.isNotEmpty()) {
+                                state.handleState = HandleState.Cursor
+                            }
+                        }
+                    } else {
+                        manager.deselect(offset)
+                    }
+                }
+            }
+            .then(selectionModifier)
             .pointerHoverIcon(textPointerIcon)
     } else {
         Modifier
@@ -1107,35 +1130,13 @@ private fun notifyFocusedRect(
     }
 }
 
-internal expect fun Modifier.focusAndSelectionBehavior(
+internal expect fun Modifier.getTextFieldSelectionModifier(
     manager: TextFieldSelectionManager,
+    enabled: Boolean,
     state: TextFieldState,
     focusRequester: FocusRequester,
-    readOnly: Boolean,
-    enabled: Boolean,
-    interactionSource: MutableInteractionSource?,
-    offsetMapping: OffsetMapping
+    readOnly: Boolean
 ): Modifier
-
-//internal expect fun Modifier.focusBehavior(
-//    manager: TextFieldSelectionManager,
-//    state: TextFieldState,
-//    focusRequester: FocusRequester,
-//    readOnly: Boolean,
-//    enabled: Boolean,
-//    interactionSource: MutableInteractionSource?,
-//    offsetMapping: OffsetMapping
-//): Modifier
-//
-//internal expect fun Modifier.selectionBehavior(
-//    manager: TextFieldSelectionManager,
-//    state: TextFieldState,
-//    focusRequester: FocusRequester,
-//    readOnly: Boolean,
-//    enabled: Boolean,
-//    interactionSource: MutableInteractionSource?,
-//    offsetMapping: OffsetMapping
-//): Modifier
 
 @OptIn(InternalFoundationTextApi::class)
 internal fun Modifier.androidFocusBehavior(

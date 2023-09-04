@@ -16,9 +16,13 @@
 
 package androidx.compose.foundation.text
 
+import androidx.compose.foundation.gestures.NoPressGesture
 import androidx.compose.foundation.gestures.PressGestureScope
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.PressGestureScopeImpl
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.text.selection.TextFieldSelectionManager
@@ -31,119 +35,158 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.input.OffsetMapping
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
-@OptIn(InternalFoundationTextApi::class)
-internal actual fun Modifier.focusAndSelectionBehavior(
+internal actual fun Modifier.getTextFieldSelectionModifier(
     manager: TextFieldSelectionManager,
+    enabled: Boolean,
     state: TextFieldState,
     focusRequester: FocusRequester,
-    readOnly: Boolean,
-    enabled: Boolean,
-    interactionSource: MutableInteractionSource?,
-    offsetMapping: OffsetMapping
-) =
-    tapPressTextFieldModifier2(
-        interactionSource, enabled,
-        onTap = { offset: Offset ->
-            tapToFocus(state, focusRequester, !readOnly)
-            if (state.hasFocus) {
-                if (state.handleState != HandleState.Selection) {
-                    state.layoutResult?.let { layoutResult ->
-                        TextFieldDelegate.setCursorOffset(
-                            offset,
-                            layoutResult,
-                            state.processor,
-                            offsetMapping,
-                            state.onValueChange
-                        )
-                        // Won't enter cursor state when text is empty.
-                        if (state.textDelegate.text.isNotEmpty()) {
-                            state.handleState = HandleState.Cursor
+    readOnly: Boolean
+): Modifier =
+    longPressDragGestureFilter(manager.touchSelectionObserver, enabled)
+        .pointerInput(Unit) {
+            detectTapGestures2(
+                onDoubleTap = {
+                    tapToFocus(state, focusRequester, !readOnly)
+                    manager.doDoubleTapSelection(it)
+                }
+            )
+        }
+
+private suspend fun PointerInputScope.detectTapGestures2(
+    onDoubleTap: ((Offset) -> Unit)? = null,
+    onLongPress: ((Offset) -> Unit)? = null,
+    onPress: suspend PressGestureScope.(Offset) -> Unit = NoPressGesture,
+    onTap: ((Offset) -> Unit)? = null
+) = coroutineScope {
+    // special signal to indicate to the sending side that it shouldn't intercept and consume
+    // cancel/up events as we're only require down events
+    val pressScope = PressGestureScopeImpl(this@detectTapGestures2)
+
+    awaitEachGesture {
+        val down = awaitFirstDown()
+        down.consume2()
+        launch {
+            pressScope.reset()
+        }
+        if (onPress !== NoPressGesture) launch {
+            pressScope.onPress(down.position)
+        }
+        val longPressTimeout = onLongPress?.let {
+            viewConfiguration.longPressTimeoutMillis
+        } ?: (Long.MAX_VALUE / 2)
+        var upOrCancel: PointerInputChange? = null
+        try {
+            // wait for first tap up or long press
+            upOrCancel = withTimeout(longPressTimeout) {
+                val insideWaitTimeout = waitForUpOrCancellation(PointerEventPass.Initial)
+                println("insideWaitTimeout: $insideWaitTimeout")
+                insideWaitTimeout
+            }
+            if (upOrCancel == null) {
+                launch {
+                    pressScope.cancel() // tap-up was canceled
+                }
+            } else {
+                upOrCancel.consume2()
+                launch {
+                    pressScope.release()
+                }
+            }
+        } catch (_: PointerEventTimeoutCancellationException) {
+            onLongPress?.invoke(down.position)
+            consumeUntilUp2()
+            launch {
+                pressScope.release()
+            }
+        }
+
+        if (upOrCancel != null) {
+            // tap was successful.
+            if (onDoubleTap == null) {
+                onTap?.invoke(upOrCancel.position) // no need to check for double-tap.
+            } else {
+                // check for second tap
+                val secondDown = awaitSecondDown2(upOrCancel, PointerEventPass.Initial)
+                println("secondDown: $secondDown")
+                if (secondDown == null) {
+                    onTap?.invoke(upOrCancel.position) // no valid second tap started
+                } else {
+                    // Second tap down detected
+                    launch {
+                        pressScope.reset()
+                    }
+                    if (onPress !== NoPressGesture) {
+                        launch { pressScope.onPress(secondDown.position) }
+                    }
+
+                    try {
+                        // Might have a long second press as the second tap
+                        withTimeout(longPressTimeout) {
+                            val secondUp = waitForUpOrCancellation(PointerEventPass.Initial)
+                            if (secondUp != null) {
+                                secondUp.consume2()
+                                launch {
+                                    pressScope.release()
+                                }
+                                onDoubleTap(secondUp.position)
+                            } else {
+                                launch {
+                                    pressScope.cancel()
+                                }
+                                onTap?.invoke(upOrCancel.position)
+                            }
+                        }
+                    } catch (e: PointerEventTimeoutCancellationException) {
+                        // The first tap was valid, but the second tap is a long press.
+                        // notify for the first tap
+                        onTap?.invoke(upOrCancel.position)
+
+                        // notify for the long press
+                        onLongPress?.invoke(secondDown.position)
+                        consumeUntilUp2()
+                        launch {
+                            pressScope.release()
                         }
                     }
-                } else {
-                    manager.deselect(offset)
-                }
-            }
-        },
-        onDoubleTap = {
-            tapToFocus(state, focusRequester, !readOnly)
-            manager.doDoubleTapSelection(it)
-        }
-    ).pointerInput(Unit) {
-        detectDragGesturesAfterLongPress(
-            onDragEnd = {
-                manager.touchSelectionObserver
-                    .onStop()
-            },
-            onDrag = { _, offset ->
-                manager.touchSelectionObserver.onDrag(offset)
-            },
-            onDragStart = {
-                manager.touchSelectionObserver.onStart(it)
-            },
-            onDragCancel = { manager.touchSelectionObserver.onCancel() }
-        )
-    }
-
-
-/**
- * Required for the press and tap [MutableInteractionSource] consistency for TextField.
- */
-private fun Modifier.tapPressTextFieldModifier2(
-    interactionSource: MutableInteractionSource?,
-    enabled: Boolean = true,
-    onTap: (Offset) -> Unit,
-    onDoubleTap: (Offset) -> Unit,
-): Modifier = if (enabled) composed {
-    val scope = rememberCoroutineScope()
-    val pressedInteraction = remember { mutableStateOf<PressInteraction.Press?>(null) }
-    val onTapState = rememberUpdatedState(onTap)
-    DisposableEffect(interactionSource) {
-        onDispose {
-            pressedInteraction.value?.let { oldValue ->
-                val interaction = PressInteraction.Cancel(oldValue)
-                interactionSource?.tryEmit(interaction)
-                pressedInteraction.value = null
-            }
-        }
-    }
-    Modifier.pointerInput(interactionSource) {
-
-        val onPressHandler: suspend PressGestureScope.(Offset) -> Unit = {
-            scope.launch {
-                // Remove any old interactions if we didn't fire stop / cancel properly
-                pressedInteraction.value?.let { oldValue ->
-                    val interaction = PressInteraction.Cancel(oldValue)
-                    interactionSource?.emit(interaction)
-                    pressedInteraction.value = null
-                }
-                val interaction = PressInteraction.Press(it)
-                interactionSource?.emit(interaction)
-                pressedInteraction.value = interaction
-            }
-            val success = tryAwaitRelease()
-            scope.launch {
-                pressedInteraction.value?.let { oldValue ->
-                    val interaction =
-                        if (success) {
-                            PressInteraction.Release(oldValue)
-                        } else {
-                            PressInteraction.Cancel(oldValue)
-                        }
-                    interactionSource?.emit(interaction)
-                    pressedInteraction.value = null
                 }
             }
         }
-
-        detectTapGestures(
-            onPress = if (pressSelectionEnabled) { onPressHandler } else { {} },
-            onTap = { onTapState.value.invoke(it) },
-            onDoubleTap = onDoubleTap
-        )
     }
-} else this
+}
+
+private suspend fun AwaitPointerEventScope.awaitSecondDown2(
+    firstUp: PointerInputChange,
+    pass: PointerEventPass = PointerEventPass.Main,
+): PointerInputChange? = withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+    val minUptime = firstUp.uptimeMillis + viewConfiguration.doubleTapMinTimeMillis
+    var change: PointerInputChange
+    // The second tap doesn't count if it happens before DoubleTapMinTime of the first tap
+    do {
+        val awaitFirstDown = awaitFirstDown(requireUnconsumed = false, pass = pass)
+        println("awaitFirstDown: $awaitFirstDown")
+        change = awaitFirstDown
+    } while (change.uptimeMillis < minUptime)
+    change
+}
+
+fun PointerEvent.consume2() {
+
+}
+
+fun PointerInputChange.consume2() {
+
+}
+
+fun consumeUntilUp2() {
+
+}

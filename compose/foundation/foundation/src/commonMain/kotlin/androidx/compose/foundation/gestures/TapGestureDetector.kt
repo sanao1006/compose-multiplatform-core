@@ -61,7 +61,7 @@ interface PressGestureScope : Density {
     suspend fun tryAwaitRelease(): Boolean
 }
 
-private val NoPressGesture: suspend PressGestureScope.(Offset) -> Unit = { }
+public val NoPressGesture: suspend PressGestureScope.(Offset) -> Unit = { }
 
 /**
  * Detects tap, double-tap, and long press gestures and calls [onTap], [onDoubleTap], and
@@ -193,7 +193,7 @@ suspend fun PointerInputScope.detectTapGestures(
  * Consumes all pointer events until nothing is pressed and then returns. This method assumes
  * that something is currently pressed.
  */
-private suspend fun AwaitPointerEventScope.consumeUntilUp() {
+public suspend fun AwaitPointerEventScope.consumeUntilUp() {
     do {
         val event = awaitPointerEvent()
         event.changes.fastForEach { it.consume() }
