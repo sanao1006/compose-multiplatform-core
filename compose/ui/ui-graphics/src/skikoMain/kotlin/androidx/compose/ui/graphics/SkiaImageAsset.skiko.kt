@@ -39,10 +39,14 @@ fun Bitmap.asComposeImageBitmap(): ImageBitmap = SkiaBackedImageBitmap(this)
 fun Image.toComposeImageBitmap(): ImageBitmap = SkiaBackedImageBitmap(toBitmap())
 
 private fun Image.toBitmap(): Bitmap {
-    val bitmap = Bitmap()
-    bitmap.allocPixels(ImageInfo.makeN32(width, height, ColorAlphaType.PREMUL))
-    val canvas = org.jetbrains.skia.Canvas(bitmap)
-    canvas.drawImage(this, 0f, 0f)
+    val bitmap = Bitmap.makeFromImage(this)
+    // TODO(o.k.): make a PR
+    // According to profiler (k/wasm in browser) this change reduces the blocking time by ~40%
+    // (tested in jetsnack example)
+
+//    bitmap.allocPixels(ImageInfo.makeN32(width, height, ColorAlphaType.PREMUL))
+//    val canvas = org.jetbrains.skia.Canvas(bitmap)
+//    canvas.drawImage(this, 0f, 0f)
     bitmap.setImmutable()
     return bitmap
 }
