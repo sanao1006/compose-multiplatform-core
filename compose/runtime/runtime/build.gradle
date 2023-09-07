@@ -74,7 +74,7 @@ if(AndroidXComposePlugin.isMultiplatformEnabled(project)) {
         // https://github.com/Kotlin/kotlinx.coroutines/blob/master/gradle/compile-native-multiplatform.gradle
         watchosArm64()
         watchosArm32()
-        watchosX86()
+//        watchosX86()
         watchosX64()
         watchosSimulatorArm64()
         tvosArm64()
@@ -157,11 +157,8 @@ if(AndroidXComposePlugin.isMultiplatformEnabled(project)) {
             }
 
             if (project.kotlinWasmEnabled.toBoolean()) {
-                wasmMain {
+                wasmJsMain {
                     dependsOn(jsWasmMain)
-                    dependencies {
-                        implementation(kotlin("stdlib-wasm"))
-                    }
                 }
             }
 
@@ -232,7 +229,7 @@ if(AndroidXComposePlugin.isMultiplatformEnabled(project)) {
                     implementation(libs.kotlinTestJs)
                 }
             }
-            wasmTest {
+            wasmJsTest {
                 dependencies {
                     //implementation(libs.kotlinTestJs)
                     implementation(libs.create("kotlinTestWasm"))
