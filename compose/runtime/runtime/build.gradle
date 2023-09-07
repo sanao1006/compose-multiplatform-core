@@ -230,6 +230,7 @@ if(AndroidXComposePlugin.isMultiplatformEnabled(project)) {
                 }
             }
             wasmJsTest {
+                dependsOn(nonEmulatorCommonTest)
                 dependencies {
                     //implementation(libs.kotlinTestJs)
                     implementation(libs.create("kotlinTestWasm"))
