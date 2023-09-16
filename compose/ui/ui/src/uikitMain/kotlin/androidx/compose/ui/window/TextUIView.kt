@@ -54,152 +54,12 @@ internal class TextUIView : UIView, UIKeyInputProtocol, UITextInputProtocol {
         throw UnsupportedOperationException("init(coder: NSCoder) is not supported for SkikoUIView")
     }
 
-    var delegate: SkikoUIViewDelegate? = null
     var input: IOSSkikoInput? = null
     var inputTraits: SkikoUITextInputTraits = object : SkikoUITextInputTraits {}
-
-    private val _device: MTLDeviceProtocol =
-        MTLCreateSystemDefaultDevice() ?: throw IllegalStateException("Metal is not supported on this system")
-    private val _metalLayer: CAMetalLayer get() = layer as CAMetalLayer
     private var _inputDelegate: UITextInputDelegateProtocol? = null
-    private var _currentTextMenuActions: TextActions? = null
-    private val _redrawer: MetalRedrawer = MetalRedrawer(
-        _metalLayer,
-        callbacks = object : MetalRedrawerCallbacks {
-            override fun draw(surface: Surface, targetTimestamp: NSTimeInterval) {
-                delegate?.draw(surface, targetTimestamp)
-            }
-
-            override fun retrieveCATransactionCommands(): List<() -> Unit> =
-                delegate?.retrieveCATransactionCommands() ?: listOf()
-        }
-    )
-
-    /*
-     * When there at least one tracked touch, we need notify redrawer about it. It should schedule CADisplayLink which
-     * affects frequency of polling UITouch events on high frequency display and forces it to match display refresh rate.
-     */
-    private var _touchesCount = 0
-        set(value) {
-            field = value
-
-            val needHighFrequencyPolling = value > 0
-
-            _redrawer.needsProactiveDisplayLink = needHighFrequencyPolling
-        }
+    var delegate: SkikoUIViewDelegate? = null
 
     constructor() : super(frame = CGRectZero.readValue())
-
-    init {
-        multipleTouchEnabled = true
-        opaque = false // For UIKit interop through a "Hole"
-
-        _metalLayer.also {
-            // Workaround for KN compiler bug
-            // Type mismatch: inferred type is platform.Metal.MTLDeviceProtocol but objcnames.protocols.MTLDeviceProtocol? was expected
-            @Suppress("USELESS_CAST")
-            it.device = _device as objcnames.protocols.MTLDeviceProtocol?
-
-            it.pixelFormat = MTLPixelFormatBGRA8Unorm
-            doubleArrayOf(0.0, 0.0, 0.0, 0.0).usePinned { pinned ->
-                it.backgroundColor = CGColorCreate(CGColorSpaceCreateDeviceRGB(), pinned.addressOf(0))
-            }
-            it.framebufferOnly = false
-        }
-    }
-
-    fun needRedraw() = _redrawer.needRedraw()
-
-    var isForcedToPresentWithTransactionEveryFrame by _redrawer::isForcedToPresentWithTransactionEveryFrame
-
-    /**
-     * Show copy/paste text menu
-     * @param targetRect - rectangle of selected text area
-     * @param textActions - available (not null) actions in text menu
-     */
-    fun showTextMenu(targetRect: Rect, textActions: TextActions) {
-        _currentTextMenuActions = textActions
-        val menu: UIMenuController = UIMenuController.sharedMenuController()
-        val cgRect = CGRectMake(
-            x = targetRect.left.toDouble(),
-            y = targetRect.top.toDouble(),
-            width = targetRect.width.toDouble(),
-            height = targetRect.height.toDouble()
-        )
-        val isTargetVisible = CGRectIntersectsRect(bounds, cgRect)
-        if (isTargetVisible) {
-            if (menu.isMenuVisible()) {
-                menu.setTargetRect(cgRect, this)
-            } else {
-                menu.showMenuFromView(this, cgRect)
-            }
-        } else {
-            if (menu.isMenuVisible()) {
-                menu.hideMenu()
-            }
-        }
-    }
-
-    fun hideTextMenu() {
-        _currentTextMenuActions = null
-        val menu: UIMenuController = UIMenuController.sharedMenuController()
-        menu.hideMenu()
-    }
-
-    fun isTextMenuShown(): Boolean {
-        return _currentTextMenuActions != null
-    }
-
-    override fun copy(sender: Any?) {
-        _currentTextMenuActions?.copy?.invoke()
-    }
-
-    override fun paste(sender: Any?) {
-        _currentTextMenuActions?.paste?.invoke()
-    }
-
-    override fun cut(sender: Any?) {
-        _currentTextMenuActions?.cut?.invoke()
-    }
-
-    override fun selectAll(sender: Any?) {
-        _currentTextMenuActions?.selectAll?.invoke()
-    }
-
-    fun dispose() {
-        _redrawer.dispose()
-        removeFromSuperview()
-    }
-
-    override fun didMoveToWindow() {
-        super.didMoveToWindow()
-
-        window?.screen?.let {
-            contentScaleFactor = it.scale
-            _redrawer.maximumFramesPerSecond = it.maximumFramesPerSecond
-        }
-    }
-
-    override fun layoutSubviews() {
-        super.layoutSubviews()
-
-        val scaledSize = bounds.useContents {
-            CGSizeMake(size.width * contentScaleFactor, size.height * contentScaleFactor)
-        }
-
-        // If drawableSize is zero in any dimension it means that it's a first layout
-        // we need to synchronously dispatch first draw and block until it's presented
-        // so user doesn't have a flicker
-        val needsSynchronousDraw = _metalLayer.drawableSize.useContents {
-            width == 0.0 || height == 0.0
-        }
-
-        _metalLayer.drawableSize = scaledSize
-
-        if (needsSynchronousDraw) {
-            _redrawer.drawSynchronously()
-        }
-    }
 
     /**
      * A Boolean value that indicates whether the text-entry object has any text.
@@ -256,75 +116,6 @@ internal class TextUIView : UIView, UIKeyInputProtocol, UITextInputProtocol {
             }
         }
         super.pressesEnded(presses, withEvent)
-    }
-
-    /**
-     * https://developer.apple.com/documentation/uikit/uiview/1622533-point
-     */
-    override fun pointInside(point: CValue<CGPoint>, withEvent: UIEvent?): Boolean =
-        delegate?.pointInside(point, withEvent) ?: super.pointInside(point, withEvent)
-
-
-    override fun touchesBegan(touches: Set<*>, withEvent: UIEvent?) {
-        super.touchesBegan(touches, withEvent)
-
-        _touchesCount += touches.size
-
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.DOWN))
-        }
-    }
-
-    override fun touchesEnded(touches: Set<*>, withEvent: UIEvent?) {
-        super.touchesEnded(touches, withEvent)
-
-        _touchesCount -= touches.size
-
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.UP))
-        }
-    }
-
-    override fun touchesMoved(touches: Set<*>, withEvent: UIEvent?) {
-        super.touchesMoved(touches, withEvent)
-
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.MOVE))
-        }
-    }
-
-    override fun touchesCancelled(touches: Set<*>, withEvent: UIEvent?) {
-        super.touchesCancelled(touches, withEvent)
-
-        _touchesCount -= touches.size
-
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.UP))
-        }
-    }
-
-    private fun UIEvent.toSkikoPointerEvent(kind: SkikoPointerEventKind): SkikoPointerEvent {
-        val pointers = touchesForView(this@SkikoUIView).orEmpty().map {
-            val touch = it as UITouch
-            val (x, y) = touch.locationInView(this@SkikoUIView).useContents { x to y }
-            SkikoPointer(
-                x = x,
-                y = y,
-                pressed = touch.isPressed,
-                device = SkikoPointerDevice.TOUCH,
-                id = touch.hashCode().toLong(),
-                pressure = touch.force
-            )
-        }
-
-        return SkikoPointerEvent(
-            x = pointers.centroidX,
-            y = pointers.centroidY,
-            kind = kind,
-            timestamp = (timestamp * 1_000).toLong(),
-            pointers = pointers,
-            platform = this
-        )
     }
 
     override fun inputDelegate(): UITextInputDelegateProtocol? {
@@ -636,23 +427,6 @@ internal class TextUIView : UIView, UIKeyInputProtocol, UITextInputProtocol {
         return this
     }
 
-    override fun canPerformAction(action: COpaquePointer?, withSender: Any?): Boolean =
-        when (action) {
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::copy.name + ":") ->
-                _currentTextMenuActions?.copy != null
-
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::cut.name + ":") ->
-                _currentTextMenuActions?.cut != null
-
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::paste.name + ":") ->
-                _currentTextMenuActions?.paste != null
-
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::selectAll.name + ":") ->
-                _currentTextMenuActions?.selectAll != null
-
-            else -> false
-        }
-
     override fun keyboardType(): UIKeyboardType = inputTraits.keyboardType()
     override fun keyboardAppearance(): UIKeyboardAppearance = inputTraits.keyboardAppearance()
     override fun returnKeyType(): UIReturnKeyType = inputTraits.returnKeyType()
@@ -756,22 +530,4 @@ private fun toSkikoKeyboardEvent(
         timestamp,
         event
     )
-}
-
-private fun toSkikoModifiers(event: UIPress): SkikoInputModifiers {
-    var result = 0
-    val modifiers = event.key!!.modifierFlags
-    if (modifiers and UIKeyModifierAlternate != 0L) {
-        result = result.or(SkikoInputModifiers.ALT.value)
-    }
-    if (modifiers and UIKeyModifierShift != 0L) {
-        result = result.or(SkikoInputModifiers.SHIFT.value)
-    }
-    if (modifiers and UIKeyModifierControl != 0L) {
-        result = result.or(SkikoInputModifiers.CONTROL.value)
-    }
-    if (modifiers and UIKeyModifierCommand != 0L) {
-        result = result.or(SkikoInputModifiers.META.value)
-    }
-    return SkikoInputModifiers(result)
 }

@@ -16,14 +16,27 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import platform.UIKit.UIKeyboardAppearance
 import platform.UIKit.UIKeyboardAppearanceDefault
 import platform.UIKit.UIKeyboardType
+import platform.UIKit.UIKeyboardTypeASCIICapable
+import platform.UIKit.UIKeyboardTypeDecimalPad
 import platform.UIKit.UIKeyboardTypeDefault
+import platform.UIKit.UIKeyboardTypeEmailAddress
+import platform.UIKit.UIKeyboardTypeNumberPad
+import platform.UIKit.UIKeyboardTypePhonePad
+import platform.UIKit.UIKeyboardTypeURL
 import platform.UIKit.UIReturnKeyType
 import platform.UIKit.UITextAutocapitalizationType
 import platform.UIKit.UITextAutocorrectionType
 import platform.UIKit.UITextContentType
+import platform.UIKit.UITextContentTypeEmailAddress
+import platform.UIKit.UITextContentTypePassword
+import platform.UIKit.UITextContentTypeTelephoneNumber
 import platform.UIKit.UITextSmartDashesType
 import platform.UIKit.UITextSmartInsertDeleteType
 import platform.UIKit.UITextSmartQuotesType
@@ -67,3 +80,76 @@ internal interface SkikoUITextInputTraits {
         UITextSmartInsertDeleteType.UITextSmartInsertDeleteTypeDefault
 
 }
+
+internal fun getSkikoUITextInputTraits(currentImeOptions: ImeOptions): SkikoUITextInputTraits =
+    object : SkikoUITextInputTraits {
+        override fun keyboardType(): UIKeyboardType =
+            when (currentImeOptions?.keyboardType) {
+                KeyboardType.Text -> UIKeyboardTypeDefault
+                KeyboardType.Ascii -> UIKeyboardTypeASCIICapable
+                KeyboardType.Number -> UIKeyboardTypeNumberPad
+                KeyboardType.Phone -> UIKeyboardTypePhonePad
+                KeyboardType.Uri -> UIKeyboardTypeURL
+                KeyboardType.Email -> UIKeyboardTypeEmailAddress
+                KeyboardType.Password -> UIKeyboardTypeASCIICapable // TODO Correct?
+                KeyboardType.NumberPassword -> UIKeyboardTypeNumberPad // TODO Correct?
+                KeyboardType.Decimal -> UIKeyboardTypeDecimalPad
+                else -> UIKeyboardTypeDefault
+            }
+
+        override fun keyboardAppearance(): UIKeyboardAppearance = UIKeyboardAppearanceDefault
+        override fun returnKeyType(): UIReturnKeyType =
+            when (currentImeOptions?.imeAction) {
+                ImeAction.Default -> UIReturnKeyType.UIReturnKeyDefault
+                ImeAction.None -> UIReturnKeyType.UIReturnKeyDefault
+                ImeAction.Go -> UIReturnKeyType.UIReturnKeyGo
+                ImeAction.Search -> UIReturnKeyType.UIReturnKeySearch
+                ImeAction.Send -> UIReturnKeyType.UIReturnKeySend
+                ImeAction.Previous -> UIReturnKeyType.UIReturnKeyDefault
+                ImeAction.Next -> UIReturnKeyType.UIReturnKeyNext
+                ImeAction.Done -> UIReturnKeyType.UIReturnKeyDone
+                else -> UIReturnKeyType.UIReturnKeyDefault
+            }
+
+        override fun textContentType(): UITextContentType? =
+            when (currentImeOptions.keyboardType) {
+                KeyboardType.Password, KeyboardType.NumberPassword -> UITextContentTypePassword
+                KeyboardType.Email -> UITextContentTypeEmailAddress
+                KeyboardType.Phone -> UITextContentTypeTelephoneNumber
+                else -> null
+            }
+
+        override fun isSecureTextEntry(): Boolean =
+            when (currentImeOptions.keyboardType) {
+                KeyboardType.Password, KeyboardType.NumberPassword -> true
+                else -> false
+            }
+
+        override fun enablesReturnKeyAutomatically(): Boolean = false
+
+        override fun autocapitalizationType(): UITextAutocapitalizationType =
+            when (currentImeOptions?.capitalization) {
+                KeyboardCapitalization.None ->
+                    UITextAutocapitalizationType.UITextAutocapitalizationTypeNone
+
+                KeyboardCapitalization.Characters ->
+                    UITextAutocapitalizationType.UITextAutocapitalizationTypeAllCharacters
+
+                KeyboardCapitalization.Words ->
+                    UITextAutocapitalizationType.UITextAutocapitalizationTypeWords
+
+                KeyboardCapitalization.Sentences ->
+                    UITextAutocapitalizationType.UITextAutocapitalizationTypeSentences
+
+                else ->
+                    UITextAutocapitalizationType.UITextAutocapitalizationTypeNone
+            }
+
+        override fun autocorrectionType(): UITextAutocorrectionType =
+            when (currentImeOptions?.autoCorrect) {
+                true -> UITextAutocorrectionType.UITextAutocorrectionTypeYes
+                false -> UITextAutocorrectionType.UITextAutocorrectionTypeNo
+                else -> UITextAutocorrectionType.UITextAutocorrectionTypeDefault
+            }
+
+    }

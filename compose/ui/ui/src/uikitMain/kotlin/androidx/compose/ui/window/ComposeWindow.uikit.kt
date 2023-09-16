@@ -500,6 +500,9 @@ internal actual class ComposeWindow : UIViewController {
         attachedComposeContext = null
     }
 
+    private var _textUIView: TextUIView? = null
+    private lateinit var skikoUIViewDelegate: SkikoUIViewDelegate
+
     private fun attachComposeIfNeeded() {
         if (attachedComposeContext != null) {
             return // already attached
@@ -512,23 +515,33 @@ internal actual class ComposeWindow : UIViewController {
 
         val inputServices = UIKitTextInputService(
             showSoftwareKeyboard = {
-                skikoUIView.showScreenKeyboard()
+                _textUIView?.becomeFirstResponder()
             },
             hideSoftwareKeyboard = {
-                skikoUIView.hideScreenKeyboard()
+                _textUIView?.resignFirstResponder()
             },
             updateView = {
                 skikoUIView.setNeedsDisplay() // redraw on next frame
                 platform.QuartzCore.CATransaction.flush() // clear all animations
                 skikoUIView.reloadInputViews() // update input (like screen keyboard)
             },
-            textWillChange = { skikoUIView.textWillChange() },
-            textDidChange = { skikoUIView.textDidChange() },
-            selectionWillChange = { skikoUIView.selectionWillChange() },
-            selectionDidChange = { skikoUIView.selectionDidChange() },
+            textWillChange = { _textUIView?.textWillChange() },
+            textDidChange = { _textUIView?.textDidChange() },
+            selectionWillChange = { _textUIView?.selectionWillChange() },
+            selectionDidChange = { _textUIView?.selectionDidChange() },
+            startInputCallback = { option, skikoInput ->
+                _textUIView = TextUIView().also {
+                    skikoUIView.addSubview(it)
+                }
+                _textUIView?.input = skikoInput
+                _textUIView?.inputTraits = getSkikoUITextInputTraits(option)
+                _textUIView?.delegate = skikoUIViewDelegate
+            },
+            stopInputCallback = {
+                _textUIView?.removeFromSuperview()
+                _textUIView = null
+            },
         )
-
-        val inputTraits = inputServices.skikoUITextInputTraits
 
         val platform = object : Platform by Platform.Empty {
             override val windowInfo: WindowInfo
@@ -592,9 +605,7 @@ internal actual class ComposeWindow : UIViewController {
             invalidate = skikoUIView::needRedraw,
         )
 
-        skikoUIView.input = inputServices.skikoInput
-        skikoUIView.inputTraits = inputTraits
-        skikoUIView.delegate = object : SkikoUIViewDelegate {
+        skikoUIViewDelegate = object : SkikoUIViewDelegate {
             override fun onKeyboardEvent(event: SkikoKeyboardEvent) {
                 scene.sendKeyEvent(KeyEvent(event))
             }
@@ -644,11 +655,13 @@ internal actual class ComposeWindow : UIViewController {
                 val integral = floor(targetTimestamp)
                 val fractional = targetTimestamp - integral
                 val secondsToNanos = 1_000_000_000L
-                val nanos = integral.roundToLong() * secondsToNanos + (fractional * 1e9).roundToLong()
+                val nanos =
+                    integral.roundToLong() * secondsToNanos + (fractional * 1e9).roundToLong()
 
                 scene.render(surface.canvas, nanos)
             }
         }
+        skikoUIView.delegate = skikoUIViewDelegate
 
         scene.setContent(
             onPreviewKeyEvent = inputServices::onPreviewKeyEvent,
