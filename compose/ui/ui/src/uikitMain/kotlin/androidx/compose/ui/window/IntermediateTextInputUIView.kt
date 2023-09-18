@@ -18,32 +18,20 @@ package androidx.compose.ui.window
 
 import androidx.compose.ui.platform.IOSSkikoInput
 import androidx.compose.ui.platform.SkikoUITextInputTraits
-import androidx.compose.ui.platform.TextActions
 import kotlinx.cinterop.*
-import org.jetbrains.skia.Rect
 import platform.CoreGraphics.*
 import platform.Foundation.*
-import platform.Metal.MTLCreateSystemDefaultDevice
-import platform.Metal.MTLDeviceProtocol
-import platform.Metal.MTLPixelFormatBGRA8Unorm
 import platform.QuartzCore.CAMetalLayer
 import platform.UIKit.*
 import platform.darwin.NSInteger
-import kotlin.math.max
-import kotlin.math.min
-import org.jetbrains.skia.Surface
-import org.jetbrains.skiko.SkikoInputModifiers
 import org.jetbrains.skiko.SkikoKey
 import org.jetbrains.skiko.SkikoKeyboardEvent
 import org.jetbrains.skiko.SkikoKeyboardEventKind
 import org.jetbrains.skiko.SkikoPointer
-import org.jetbrains.skiko.SkikoPointerDevice
-import org.jetbrains.skiko.SkikoPointerEvent
-import org.jetbrains.skiko.SkikoPointerEventKind
 
 @Suppress("CONFLICTING_OVERLOADS")
 @ExportObjCClass
-internal class TextUIView : UIView, UIKeyInputProtocol, UITextInputProtocol {
+internal class IntermediateTextInputUIView : UIView, UIKeyInputProtocol, UITextInputProtocol {
     companion object : UIViewMeta() {
         override fun layerClass() = CAMetalLayer
     }

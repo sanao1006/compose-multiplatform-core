@@ -506,7 +506,7 @@ internal actual class ComposeWindow : UIViewController {
         attachedComposeContext = null
     }
 
-    private var _textUIView: TextUIView? = null
+    private var _textUIView: IntermediateTextInputUIView? = null
     private lateinit var skikoUIViewDelegate: SkikoUIViewDelegate
 
     private fun attachComposeIfNeeded() {
@@ -584,7 +584,7 @@ internal actual class ComposeWindow : UIViewController {
                 currentImeOptions = imeOptions
                 currentImeActionHandler = onImeActionPerformed
 
-                _textUIView = TextUIView().also {
+                _textUIView = IntermediateTextInputUIView().also {
                     skikoUIView.addSubview(it)
                 }
                 _textUIView?.input = object : IOSSkikoInput {
