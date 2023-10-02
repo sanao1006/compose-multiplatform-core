@@ -159,7 +159,10 @@ private fun getSelectionModifier(manager: TextFieldSelectionManager): Modifier {
     }
 }
 
-private fun TextFieldSelectionManager.doRepeatingTapSelection(touchPointOffset: Offset, selectionAdjustment: SelectionAdjustment) {
+private fun TextFieldSelectionManager.doRepeatingTapSelection(
+    touchPointOffset: Offset,
+    selectionAdjustment: SelectionAdjustment
+) {
     if (value.text.isEmpty()) return
     enterSelectionMode()
     state?.layoutResult?.let { layoutResult ->

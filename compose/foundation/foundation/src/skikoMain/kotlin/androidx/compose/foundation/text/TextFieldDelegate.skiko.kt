@@ -102,7 +102,10 @@ private fun TextLayoutResultProxy.isFirstLetterOfWordTapped(caretOffset: Int): B
     return value.getWordBoundary(caretOffset).start == caretOffset
 }
 
-private fun TextLayoutResultProxy.isCaretTapped(caretOffset: Int, previousCaretOffset: Int): Boolean {
+private fun TextLayoutResultProxy.isCaretTapped(
+    caretOffset: Int,
+    previousCaretOffset: Int
+): Boolean {
     return previousCaretOffset == caretOffset
 }
 
@@ -118,7 +121,11 @@ private fun TextLayoutResultProxy.isRightEdgeTapped(caretOffset: Int): Boolean {
     return lineStartOffset == caretOffset
 }
 
-private fun findNextWordBoundary(caretOffset: Int, currentText: String, textLayoutResult: TextLayoutResultProxy): TextRange {
+private fun findNextWordBoundary(
+    caretOffset: Int,
+    currentText: String,
+    textLayoutResult: TextLayoutResultProxy
+): TextRange {
     val wordRange = textLayoutResult.value.getWordBoundary(caretOffset)
     val currentChar = currentText[caretOffset]
     return if (!currentChar.isPunctuationOrWhitespace()) {
@@ -135,9 +142,17 @@ private fun Char.isPunctuationOrWhitespace(): Boolean {
 }
 
 private fun Char.isPunctuation(): Boolean {
-    val punctuationSet = setOf(DASH_PUNCTUATION, START_PUNCTUATION, END_PUNCTUATION, CONNECTOR_PUNCTUATION, OTHER_PUNCTUATION)
+    val punctuationSet = setOf(
+        DASH_PUNCTUATION,
+        START_PUNCTUATION,
+        END_PUNCTUATION,
+        CONNECTOR_PUNCTUATION,
+        OTHER_PUNCTUATION
+    )
     punctuationSet.forEach {
-        if (it.contains(this)) { return true }
+        if (it.contains(this)) {
+            return true
+        }
     }
     return false
 }
