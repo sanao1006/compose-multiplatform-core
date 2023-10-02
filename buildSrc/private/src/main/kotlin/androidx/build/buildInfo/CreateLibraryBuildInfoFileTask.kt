@@ -183,14 +183,12 @@ abstract class CreateLibraryBuildInfoFileTask : DefaultTask() {
             variant: VariantPublishPlan,
             shaProvider: Provider<String>
         ): TaskProvider<CreateLibraryBuildInfoFileTask> {
-            if (androidx.build.isJBFork) {
-                // We don't really use these tasks in our fork, and we may disable this completely.
-                // The reason for a duplicate is that we have a custom 'KotlinMultiplatformDecoration' publication,
-                // which leads to a task duplicate here.
-                val task = project.tasks.findByName(TASK_NAME + variant.taskSuffix)
-                if (task != null)
-                    return project.tasks.named<CreateLibraryBuildInfoFileTask>(TASK_NAME + variant.taskSuffix)
-            }
+            // We don't really use these tasks in our fork, and we may disable this completely.
+            // The reason for a duplicate is that we have a custom 'KotlinMultiplatformDecoration' publication,
+            // which leads to a task duplicate here.
+            val existingTask = project.tasks.findByName(TASK_NAME + variant.taskSuffix)
+            if (existingTask != null)
+                return project.tasks.named<CreateLibraryBuildInfoFileTask>(TASK_NAME + variant.taskSuffix)
             return project.tasks.register(
                 TASK_NAME + variant.taskSuffix,
                 CreateLibraryBuildInfoFileTask::class.java

@@ -232,7 +232,7 @@ fun enableOELPublishing(project: Project) {
  * Usage that should be added to rootSoftwareComponent to represent android-specific variants
  * It will be serialized to *.module in "variants" collection.
  */
-private class FakeAndroidUsage(
+private class CustomAndroidUsage(
     private val name: String,
     private val attributes: AttributeContainer,
     private val dependencies: Set<ModuleDependency>
@@ -302,7 +302,7 @@ private fun Project.publishAndroidxReference(target: KotlinAndroidTarget) {
 
             fun addUsageFromConfiguration(configuration: Configuration) {
                 extraUsages.add(
-                    FakeAndroidUsage(
+                    CustomAndroidUsage(
                         name = configuration.name,
                         attributes = configuration.attributes,
                         dependencies = setOf(newDependency)
@@ -359,8 +359,6 @@ private fun Project.publishAndroidxReference(target: KotlinAndroidTarget) {
                 // Use -published configuration because it would have correct attribute set
                 // required for publication.
                 val configurationName = usage.name + "-published"
-
-                //
                 configurations.matching { it.name == configurationName }.all { conf ->
                     newRootComponent.addUsageFromConfiguration(conf)
                 }
@@ -368,7 +366,3 @@ private fun Project.publishAndroidxReference(target: KotlinAndroidTarget) {
         }
     }
 }
-
-// We have few workarounds in build scripts or gradle plugins,
-// and this global val can help track them
-internal val isJBFork = true
