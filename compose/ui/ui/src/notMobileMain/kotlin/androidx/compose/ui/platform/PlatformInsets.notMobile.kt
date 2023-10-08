@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.window
+package androidx.compose.ui.platform
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntOffset
-
-@Composable
-internal actual fun Density.platformOffset(): IntOffset =
-    IntOffset.Zero
+internal actual var PlatformInsetsConfig: InsetsConfig = ZeroInsetsConfig

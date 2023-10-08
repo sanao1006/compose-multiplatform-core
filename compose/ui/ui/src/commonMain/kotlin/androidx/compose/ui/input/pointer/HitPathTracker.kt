@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.node.InternalCoreApi
 import androidx.compose.ui.node.Nodes
 import androidx.compose.ui.node.dispatchForKind
+import androidx.compose.ui.node.has
 import androidx.compose.ui.node.layoutCoordinates
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.util.fastForEach
@@ -90,6 +91,16 @@ internal class HitPathTracker(private val rootCoordinates: LayoutCoordinates) {
         internalPointerEvent: InternalPointerEvent,
         isInBounds: Boolean = true
     ): Boolean {
+        val changed = root.buildCache(
+            internalPointerEvent.changes,
+            rootCoordinates,
+            internalPointerEvent,
+            isInBounds
+        )
+        if (!changed) {
+            root.cleanUpHover()
+            return false
+        }
         var dispatchHit = root.dispatchMainEventPass(
             internalPointerEvent.changes,
             rootCoordinates,
@@ -133,6 +144,24 @@ internal class HitPathTracker(private val rootCoordinates: LayoutCoordinates) {
 internal open class NodeParent {
     val children: MutableVector<Node> = mutableVectorOf()
 
+    open fun buildCache(
+        changes: Map<PointerId, PointerInputChange>,
+        parentCoordinates: LayoutCoordinates,
+        internalPointerEvent: InternalPointerEvent,
+        isInBounds: Boolean
+    ): Boolean {
+        var changed = false
+        children.forEach {
+            changed = it.buildCache(
+                changes,
+                parentCoordinates,
+                internalPointerEvent,
+                isInBounds
+            ) || changed
+        }
+        return changed
+    }
+
     /**
      * Dispatches [changes] down the tree, for the initial and main pass.
      *
@@ -175,6 +204,7 @@ internal open class NodeParent {
             dispatched = it.dispatchFinalEventPass(internalPointerEvent) || dispatched
         }
         cleanUpHits(internalPointerEvent)
+        cleanUpHover()
         return dispatched
     }
 
@@ -217,6 +247,12 @@ internal open class NodeParent {
             }
         }
     }
+
+    open fun cleanUpHover() {
+        children.forEach {
+            it.cleanUpHover()
+        }
+    }
 }
 
 /**
@@ -235,6 +271,9 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
     // set.
     val pointerIds: MutableVector<PointerId> = mutableVectorOf()
 
+    private var isIn = true
+    private var hasEntered = false
+
     /**
      * Cached properties that will be set before the main event pass, and reset after the final
      * pass. Since we know that these won't change within the entire pass, we don't need to
@@ -246,8 +285,6 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
     private val relevantChanges: MutableMap<PointerId, PointerInputChange> = mutableMapOf()
     private var coordinates: LayoutCoordinates? = null
     private var pointerEvent: PointerEvent? = null
-    private var isIn = true
-    private var hasEntered = false
 
     override fun dispatchMainEventPass(
         changes: Map<PointerId, PointerInputChange>,
@@ -255,9 +292,6 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
         internalPointerEvent: InternalPointerEvent,
         isInBounds: Boolean
     ): Boolean {
-        // Build the cache that will be used for both the main and final pass
-        buildCache(changes, parentCoordinates, internalPointerEvent, isInBounds)
-
         // TODO(b/158243568): The below dispatching operations may cause the pointerInputFilter to
         //  become detached. Currently, they just no-op if it becomes detached and the detached
         //  pointerInputFilters are removed from being tracked with the next event. I currently
@@ -328,14 +362,22 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
      *
      * @see clearCache
      */
-    private fun buildCache(
+    override fun buildCache(
         changes: Map<PointerId, PointerInputChange>,
         parentCoordinates: LayoutCoordinates,
         internalPointerEvent: InternalPointerEvent,
         isInBounds: Boolean
-    ) {
+    ): Boolean {
+        val childChanged =
+            super.buildCache(
+                changes,
+                parentCoordinates,
+                internalPointerEvent,
+                isInBounds
+            )
+
         // Avoid future work if we know this node will no-op
-        if (!modifierNode.isAttached) return
+        if (!modifierNode.isAttached) return true
 
         modifierNode.dispatchForKind(Nodes.PointerInput) {
             coordinates = it.layoutCoordinates
@@ -384,7 +426,7 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
         if (relevantChanges.isEmpty()) {
             pointerIds.clear()
             children.clear()
-            return
+            return true // not hit
         }
 
         // Clean up any pointerIds that weren't dispatched
@@ -422,7 +464,25 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
             if (event.type == PointerEventType.Enter) hasEntered = true
             if (event.type == PointerEventType.Exit) hasEntered = false
         }
+
+        val changed = childChanged || event.type != PointerEventType.Move ||
+            hasPositionChanged(pointerEvent, event)
         pointerEvent = event
+        return changed
+    }
+
+    private fun hasPositionChanged(oldEvent: PointerEvent?, newEvent: PointerEvent): Boolean {
+        if (oldEvent == null || oldEvent.changes.size != newEvent.changes.size) {
+            return true
+        }
+        for (i in 0 until newEvent.changes.size) {
+            val old = oldEvent.changes[i]
+            val current = newEvent.changes[i]
+            if (old.position != current.position) {
+                return true
+            }
+        }
+        return false
     }
 
     /**
@@ -434,7 +494,6 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
     private fun clearCache() {
         relevantChanges.clear()
         coordinates = null
-        pointerEvent = null
     }
 
     /**
@@ -488,7 +547,10 @@ internal class Node(val modifierNode: Modifier.Node) : NodeParent() {
                 pointerIds.remove(change.id)
             }
         }
+    }
 
+    override fun cleanUpHover() {
+        super.cleanUpHover()
         isIn = false
     }
 

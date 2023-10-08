@@ -513,6 +513,27 @@ class ComposeScene internal constructor(
         snapshotChanges.perform()
     }
 
+    internal fun hitTestInteropView(position: Offset): Boolean {
+        // TODO:
+        //  Temporary solution copying control flow from [processPress].
+        //  A proper solution is to send touches to scene as black box
+        //  and handle only that ones that were received in interop view
+        //  instead of using [pointInside].
+        owners.fastForEachReversed { owner ->
+            if (owner.isInBounds(position)) {
+                return owner.hitInteropView(
+                    pointerPosition = position,
+                    isTouchEvent = true,
+                )
+            } else if (owner == focusedOwner) {
+                return false
+            }
+        }
+
+        // We didn't pass isInBounds check for any owner 🤷
+        return false
+    }
+
     /**
      * Render the current content on [canvas]. Passed [nanoTime] will be used to drive all
      * animations in the content (or any other code, which uses [withFrameNanos]
@@ -867,6 +888,17 @@ class ComposeScene internal constructor(
          * Pressure of the pointer. 0.0 - no pressure, 1.0 - average pressure
          */
         val pressure: Float = 1.0f,
+
+        /**
+         * High-frequency pointer moves in between the current event and the last event.
+         * can be used for extra accuracy when touchscreen rate exceeds framerate.
+         *
+         * Can be empty, if a platform doesn't provide any.
+         *
+         * For example, on iOS this list is populated using the data of.
+         * https://developer.apple.com/documentation/uikit/uievent/1613808-coalescedtouchesfortouch?language=objc
+         */
+        val historical: List<HistoricalChange> = emptyList()
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -940,6 +972,7 @@ private fun pointerInputEvent(
                 it.pressed,
                 it.pressure,
                 it.type,
+                historical = it.historical,
                 scrollDelta = scrollDelta
             )
         },

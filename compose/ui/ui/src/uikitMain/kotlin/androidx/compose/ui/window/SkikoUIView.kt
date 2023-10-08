@@ -16,6 +16,8 @@
 
 package androidx.compose.ui.window
 
+import androidx.compose.ui.interop.UIKitInteropAction
+import androidx.compose.ui.interop.UIKitInteropTransaction
 import androidx.compose.ui.platform.IOSSkikoInput
 import androidx.compose.ui.platform.SkikoUITextInputTraits
 import androidx.compose.ui.platform.TextActions
@@ -29,9 +31,8 @@ import platform.Metal.MTLPixelFormatBGRA8Unorm
 import platform.QuartzCore.CAMetalLayer
 import platform.UIKit.*
 import platform.darwin.NSInteger
-import kotlin.math.max
-import kotlin.math.min
 import org.jetbrains.skia.Surface
+import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.SkikoInputModifiers
 import org.jetbrains.skiko.SkikoKey
 import org.jetbrains.skiko.SkikoKeyboardEvent
@@ -47,11 +48,15 @@ internal interface SkikoUIViewDelegate {
 
     fun pointInside(point: CValue<CGPoint>, event: UIEvent?): Boolean
 
-    fun onPointerEvent(event: SkikoPointerEvent)
+    fun onTouchesEvent(view: UIView, event: UIEvent, phase: UITouchesEventPhase)
 
-    fun retrieveCATransactionCommands(): List<() -> Unit>
+    fun retrieveInteropTransaction(): UIKitInteropTransaction
 
-    fun draw(surface: Surface, targetTimestamp: NSTimeInterval)
+    fun render(canvas: Canvas, targetTimestamp: NSTimeInterval)
+}
+
+internal enum class UITouchesEventPhase {
+    BEGAN, MOVED, ENDED, CANCELLED
 }
 
 @Suppress("CONFLICTING_OVERLOADS")
@@ -77,12 +82,13 @@ internal class SkikoUIView : UIView {
     private val _redrawer: MetalRedrawer = MetalRedrawer(
         _metalLayer,
         callbacks = object : MetalRedrawerCallbacks {
-            override fun draw(surface: Surface, targetTimestamp: NSTimeInterval) {
-                delegate?.draw(surface, targetTimestamp)
+            override fun render(canvas: Canvas, targetTimestamp: NSTimeInterval) {
+                delegate?.render(canvas, targetTimestamp)
             }
 
-            override fun retrieveCATransactionCommands(): List<() -> Unit> =
-                delegate?.retrieveCATransactionCommands() ?: listOf()
+            override fun retrieveInteropTransaction(): UIKitInteropTransaction =
+                delegate?.retrieveInteropTransaction() ?: UIKitInteropTransaction.empty
+
         }
     )
 
@@ -103,7 +109,6 @@ internal class SkikoUIView : UIView {
 
     init {
         multipleTouchEnabled = true
-        opaque = false // For UIKit interop through a "Hole"
 
         _metalLayer.also {
             // Workaround for KN compiler bug
@@ -115,6 +120,7 @@ internal class SkikoUIView : UIView {
             doubleArrayOf(0.0, 0.0, 0.0, 0.0).usePinned { pinned ->
                 it.backgroundColor = CGColorCreate(CGColorSpaceCreateDeviceRGB(), pinned.addressOf(0))
             }
+            it.setOpaque(true)
             it.framebufferOnly = false
         }
     }
@@ -254,8 +260,8 @@ internal class SkikoUIView : UIView {
 
         _touchesCount += touches.size
 
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.DOWN))
+        withEvent?.let { event ->
+            delegate?.onTouchesEvent(this, event, UITouchesEventPhase.BEGAN)
         }
     }
 
@@ -264,16 +270,16 @@ internal class SkikoUIView : UIView {
 
         _touchesCount -= touches.size
 
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.UP))
+        withEvent?.let { event ->
+            delegate?.onTouchesEvent(this, event, UITouchesEventPhase.ENDED)
         }
     }
 
     override fun touchesMoved(touches: Set<*>, withEvent: UIEvent?) {
         super.touchesMoved(touches, withEvent)
 
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.MOVE))
+        withEvent?.let { event ->
+            delegate?.onTouchesEvent(this, event, UITouchesEventPhase.MOVED)
         }
     }
 
@@ -282,33 +288,9 @@ internal class SkikoUIView : UIView {
 
         _touchesCount -= touches.size
 
-        withEvent?.let {
-            delegate?.onPointerEvent(it.toSkikoPointerEvent(SkikoPointerEventKind.UP))
+        withEvent?.let { event ->
+            delegate?.onTouchesEvent(this, event, UITouchesEventPhase.CANCELLED)
         }
-    }
-
-    private fun UIEvent.toSkikoPointerEvent(kind: SkikoPointerEventKind): SkikoPointerEvent {
-        val pointers = touchesForView(this@SkikoUIView).orEmpty().map {
-            val touch = it as UITouch
-            val (x, y) = touch.locationInView(this@SkikoUIView).useContents { x to y }
-            SkikoPointer(
-                x = x,
-                y = y,
-                pressed = touch.isPressed,
-                device = SkikoPointerDevice.TOUCH,
-                id = touch.hashCode().toLong(),
-                pressure = touch.force
-            )
-        }
-
-        return SkikoPointerEvent(
-            x = pointers.centroidX,
-            y = pointers.centroidY,
-            kind = kind,
-            timestamp = (timestamp * 1_000).toLong(),
-            pointers = pointers,
-            platform = this
-        )
     }
 
     override fun canPerformAction(action: COpaquePointer?, withSender: Any?): Boolean =
@@ -365,14 +347,6 @@ private fun NSWritingDirection.directionToStr() =
         UITextLayoutDirectionDown -> "Down"
         else -> "unknown direction"
     }
-
-private val UITouch.isPressed
-    get() =
-        phase != UITouchPhase.UITouchPhaseEnded &&
-            phase != UITouchPhase.UITouchPhaseCancelled
-
-private val Iterable<SkikoPointer>.centroidX get() = asSequence().map { it.x }.average()
-private val Iterable<SkikoPointer>.centroidY get() = asSequence().map { it.y }.average()
 
 private fun toSkikoKeyboardEvent(
     event: UIPress,

@@ -19,7 +19,9 @@ package androidx.compose.ui.window
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.InternalComposeApi
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ComposeScene
 import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.SystemTheme
@@ -28,39 +30,47 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.NativeKeyEvent
+import androidx.compose.ui.input.pointer.HistoricalChange
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.toCompose
 import androidx.compose.ui.interop.LocalLayerContainer
 import androidx.compose.ui.interop.LocalUIKitInteropContext
 import androidx.compose.ui.interop.LocalUIViewController
 import androidx.compose.ui.interop.UIKitInteropContext
+import androidx.compose.ui.interop.UIKitInteropTransaction
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.uikit.*
 import androidx.compose.ui.unit.*
 import kotlin.math.absoluteValue
+import androidx.compose.ui.util.fastMap
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlin.math.roundToLong
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExportObjCClass
 import kotlinx.cinterop.ObjCAction
+import kotlinx.cinterop.objcPtr
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skia.BreakIterator
-import org.jetbrains.skia.Surface
+import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.OSVersion
 import org.jetbrains.skiko.SkikoKey
 import org.jetbrains.skiko.SkikoKeyboardEvent
 import org.jetbrains.skiko.SkikoKeyboardEventKind
 import org.jetbrains.skiko.SkikoPointerEvent
+import org.jetbrains.skiko.currentNanoTime
+import platform.CoreGraphics.CGPoint
 import org.jetbrains.skiko.available
 import platform.CoreGraphics.CGAffineTransformIdentity
 import platform.CoreGraphics.CGAffineTransformInvert
-import platform.CoreGraphics.CGPoint
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSize
@@ -108,6 +118,7 @@ fun ComposeUIViewController(
 private class AttachedComposeContext(
     val scene: ComposeScene,
     val view: SkikoUIView,
+    val interopContext: UIKitInteropContext
 ) {
     private var constraints: List<NSLayoutConstraint> = emptyList()
         set(value) {
@@ -137,8 +148,12 @@ private class AttachedComposeContext(
             view.bottomAnchor.constraintEqualToAnchor(parentView.bottomAnchor)
         )
     }
+
     fun dispose() {
         scene.close()
+        // After scene is disposed all UIKit interop actions can't be deferred to be synchronized with rendering
+        // Thus they need to be executed now.
+        interopContext.retrieve().actions.forEach { it.invoke() }
         view.dispose()
     }
 }
@@ -150,11 +165,8 @@ internal actual class ComposeWindow : UIViewController {
     internal lateinit var configuration: ComposeUIViewControllerConfiguration
     private val keyboardOverlapHeightState = mutableStateOf(0f)
     private var isInsideSwiftUI = false
-    private val safeAreaState = mutableStateOf(IOSInsets())
-    private val layoutMarginsState = mutableStateOf(IOSInsets())
-    private val interopContext = UIKitInteropContext(requestRedraw = {
-        attachedComposeContext?.view?.needRedraw()
-    })
+    private var safeAreaState by mutableStateOf(PlatformInsets())
+    private var layoutMarginsState by mutableStateOf(PlatformInsets())
 
     /*
      * Initial value is arbitarily chosen to avoid propagating invalid value logic
@@ -299,19 +311,19 @@ internal actual class ComposeWindow : UIViewController {
     fun viewSafeAreaInsetsDidChange() {
         // super.viewSafeAreaInsetsDidChange() // TODO: call super after Kotlin 1.8.20
         view.safeAreaInsets.useContents {
-            safeAreaState.value = IOSInsets(
-                top = top.dp,
-                bottom = bottom.dp,
+            safeAreaState = PlatformInsets(
                 left = left.dp,
+                top = top.dp,
                 right = right.dp,
+                bottom = bottom.dp,
             )
         }
         view.directionalLayoutMargins.useContents {
-            layoutMarginsState.value = IOSInsets(
+            layoutMarginsState = PlatformInsets(
+                left = leading.dp, // TODO: Check RTL support
                 top = top.dp,
+                right = trailing.dp, // TODO: Check RTL support
                 bottom = bottom.dp,
-                left = leading.dp,
-                right = trailing.dp,
             )
         }
     }
@@ -515,6 +527,8 @@ internal actual class ComposeWindow : UIViewController {
         }
 
         val skikoUIView = SkikoUIView()
+
+        val interopContext = UIKitInteropContext(requestRedraw = skikoUIView::needRedraw)
 
         skikoUIView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(skikoUIView)
@@ -1042,43 +1056,43 @@ internal actual class ComposeWindow : UIViewController {
 
             override fun pointInside(point: CValue<CGPoint>, event: UIEvent?): Boolean =
                 point.useContents {
-                    val hitsInteropView = attachedComposeContext?.scene?.mainOwner?.hitInteropView(
-                        pointerPosition = Offset(
-                            (x * density.density).toFloat(),
-                            (y * density.density).toFloat()
-                        ),
-                        isTouchEvent = true,
-                    ) ?: false
+                    val position = Offset(
+                        (x * density.density).toFloat(),
+                        (y * density.density).toFloat()
+                    )
 
-                    !hitsInteropView
+                    !scene.hitTestInteropView(position)
                 }
 
-            override fun onPointerEvent(event: SkikoPointerEvent) {
-                val scale = density.density
+            override fun onTouchesEvent(view: UIView, event: UIEvent, phase: UITouchesEventPhase) {
+                val density = density.density
 
                 scene.sendPointerEvent(
-                    eventType = event.kind.toCompose(),
-                    pointers = event.pointers.map {
+                    eventType = phase.toPointerEventType(),
+                    pointers = event.touchesForView(view)?.map {
+                        val touch = it as UITouch
+                        val id = touch.hashCode().toLong()
+
+                        val position = touch.offsetInView(view, density)
+
                         ComposeScene.Pointer(
-                            id = PointerId(it.id),
-                            position = Offset(
-                                x = it.x.toFloat() * scale,
-                                y = it.y.toFloat() * scale
-                            ),
-                            pressed = it.pressed,
-                            type = it.device.toCompose(),
-                            pressure = it.pressure.toFloat(),
+                            id = PointerId(id),
+                            position = position,
+                            pressed = touch.isPressed,
+                            type = PointerType.Touch,
+                            pressure = touch.force.toFloat(),
+                            historical = event.historicalChangesForTouch(touch, view, density)
                         )
-                    },
-                    timeMillis = event.timestamp,
+                    } ?: emptyList(),
+                    timeMillis = (event.timestamp * 1e3).toLong(),
                     nativeEvent = event
                 )
             }
 
-            override fun retrieveCATransactionCommands(): List<() -> Unit> =
-                interopContext.getActionsAndClear()
+            override fun retrieveInteropTransaction(): UIKitInteropTransaction =
+                interopContext.retrieve()
 
-            override fun draw(surface: Surface, targetTimestamp: NSTimeInterval) {
+            override fun render(canvas: Canvas, targetTimestamp: NSTimeInterval) {
                 // The calculation is split in two instead of
                 // `(targetTimestamp * 1e9).toLong()`
                 // to avoid losing precision for fractional part
@@ -1088,7 +1102,7 @@ internal actual class ComposeWindow : UIViewController {
                 val nanos =
                     integral.roundToLong() * secondsToNanos + (fractional * 1e9).roundToLong()
 
-                scene.render(surface.canvas, nanos)
+                scene.render(canvas, nanos)
             }
         }
         skikoUIView.delegate = skikoUIViewDelegate
@@ -1101,8 +1115,8 @@ internal actual class ComposeWindow : UIViewController {
                     LocalLayerContainer provides view,
                     LocalUIViewController provides this,
                     LocalKeyboardOverlapHeightState provides keyboardOverlapHeightState,
-                    LocalSafeAreaState provides safeAreaState,
-                    LocalLayoutMarginsState provides layoutMarginsState,
+                    LocalSafeArea provides safeAreaState,
+                    LocalLayoutMargins provides layoutMarginsState,
                     LocalInterfaceOrientationState provides interfaceOrientationState,
                     LocalSystemTheme provides systemTheme.value,
                     LocalUIKitInteropContext provides interopContext,
@@ -1114,33 +1128,70 @@ internal actual class ComposeWindow : UIViewController {
 
 
         attachedComposeContext =
-            AttachedComposeContext(scene, skikoUIView).also {
+            AttachedComposeContext(scene, skikoUIView, interopContext).also {
                 it.setConstraintsToFillView(view)
                 updateLayout(it)
             }
     }
 }
 
+private fun UITouch.offsetInView(view: UIView, density: Float): Offset =
+    locationInView(view).useContents {
+        Offset(x.toFloat() * density, y.toFloat() * density)
+    }
+
+private fun UIEvent.historicalChangesForTouch(touch: UITouch, view: UIView, density: Float): List<HistoricalChange> {
+    val touches = coalescedTouchesForTouch(touch) ?: return emptyList()
+
+    return if (touches.size > 1) {
+        // subList last index is exclusive, so the last touch in the list is not included
+        // because it's the actual touch for which coalesced touches were requested
+        touches.subList(0, touches.size - 1).map {
+            val historicalTouch = it as UITouch
+            HistoricalChange(
+                uptimeMillis = (historicalTouch.timestamp * 1e3).toLong(),
+                position = historicalTouch.offsetInView(view, density)
+            )
+        }
+    } else {
+        emptyList()
+    }
+}
+
+private val UITouch.isPressed
+    get() = when (phase) {
+        UITouchPhase.UITouchPhaseEnded, UITouchPhase.UITouchPhaseCancelled -> false
+        else -> true
+    }
+
+private fun UITouchesEventPhase.toPointerEventType(): PointerEventType =
+    when (this) {
+        UITouchesEventPhase.BEGAN -> PointerEventType.Press
+        UITouchesEventPhase.MOVED -> PointerEventType.Move
+        UITouchesEventPhase.ENDED -> PointerEventType.Release
+        UITouchesEventPhase.CANCELLED -> PointerEventType.Release
+    }
+
 private fun UIViewController.checkIfInsideSwiftUI(): Boolean {
-        var parent = parentViewController
+    var parent = parentViewController
 
-        while (parent != null) {
-            val isUIHostingController = parent.`class`()?.let {
-                val className = NSStringFromClass(it)
-                // SwiftUI UIHostingController has mangled name depending on generic instantiation type,
-                // It always contains UIHostingController substring though
-                return className.contains("UIHostingController")
-            } ?: false
+    while (parent != null) {
+        val isUIHostingController = parent.`class`()?.let {
+            val className = NSStringFromClass(it)
+            // SwiftUI UIHostingController has mangled name depending on generic instantiation type,
+            // It always contains UIHostingController substring though
+            return className.contains("UIHostingController")
+        } ?: false
 
-            if (isUIHostingController) {
-                return true
-            }
-
-            parent = parent.parentViewController
+        if (isUIHostingController) {
+            return true
         }
 
-        return false
+        parent = parent.parentViewController
     }
+
+    return false
+}
 
 private fun UIUserInterfaceStyle.asComposeSystemTheme(): SystemTheme {
     return when (this) {

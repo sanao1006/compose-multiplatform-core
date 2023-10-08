@@ -36,8 +36,11 @@ import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.InsetsConfig
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.PlatformInsets
+import androidx.compose.ui.platform.PlatformInsetsConfig
+import androidx.compose.ui.platform.ZeroInsetsConfig
 import androidx.compose.ui.semantics.popup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -58,11 +61,13 @@ import androidx.compose.ui.unit.round
  * @property dismissOnClickOutside Whether the popup can be dismissed by clicking outside the
  * popup's bounds. If true, clicking outside the popup will call onDismissRequest.
  * @property clippingEnabled Whether to allow the popup window to extend beyond the bounds of the
- * screen. By default the window is clipped to the screen boundaries. Setting this to false will
+ * screen. By default, the window is clipped to the screen boundaries. Setting this to false will
  * allow windows to be accurately positioned.
  * The default value is true.
- * @property usePlatformDefaultWidth Whether the width of the dialog's content should be limited to
+ * @property usePlatformDefaultWidth Whether the width of the popup's content should be limited to
  * the platform default, which is smaller than the screen width.
+ * @property usePlatformInsets Whether the width of the popup's content should be limited by
+ * platform insets.
  */
 @Immutable
 actual class PopupProperties @ExperimentalComposeUiApi constructor(
@@ -71,6 +76,7 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
     actual val dismissOnClickOutside: Boolean = true,
     actual val clippingEnabled: Boolean = true,
     val usePlatformDefaultWidth: Boolean = false,
+    val usePlatformInsets: Boolean = true,
 ) {
     // Constructor with all non-experimental arguments.
     constructor(
@@ -84,6 +90,7 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
         dismissOnClickOutside = dismissOnClickOutside,
         clippingEnabled = clippingEnabled,
         usePlatformDefaultWidth = false,
+        usePlatformInsets = true,
     )
 
     actual constructor(
@@ -107,6 +114,7 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
         dismissOnClickOutside = dismissOnClickOutside,
         clippingEnabled = clippingEnabled,
         usePlatformDefaultWidth = false,
+        usePlatformInsets = true,
     )
 
     override fun equals(other: Any?): Boolean {
@@ -118,6 +126,7 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
         if (dismissOnClickOutside != other.dismissOnClickOutside) return false
         if (clippingEnabled != other.clippingEnabled) return false
         if (usePlatformDefaultWidth != other.usePlatformDefaultWidth) return false
+        if (usePlatformInsets != other.usePlatformInsets) return false
 
         return true
     }
@@ -128,6 +137,7 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
         result = 31 * result + dismissOnClickOutside.hashCode()
         result = 31 * result + clippingEnabled.hashCode()
         result = 31 * result + usePlatformDefaultWidth.hashCode()
+        result = 31 * result + usePlatformInsets.hashCode()
         return result
     }
 }
@@ -421,6 +431,7 @@ private fun PopupLayout(
     onOutsidePointerEvent: ((PointerInputEvent) -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
+    val platformInsets = properties.insetsConfig.safeInsets
     var layoutParentBoundsInWindow: IntRect? by remember { mutableStateOf(null) }
     EmptyLayout(Modifier.parentBoundsInWindow { layoutParentBoundsInWindow = it })
     RootLayout(
@@ -429,23 +440,27 @@ private fun PopupLayout(
         onOutsidePointerEvent = onOutsidePointerEvent
     ) { owner ->
         val parentBounds = layoutParentBoundsInWindow ?: return@RootLayout
-        val density = LocalDensity.current
         val layoutDirection = LocalLayoutDirection.current
         val measurePolicy = rememberPopupMeasurePolicy(
             popupPositionProvider = popupPositionProvider,
             properties = properties,
-            platformOffset = with(density) { platformOffset() },
+            platformInsets = platformInsets,
             layoutDirection = layoutDirection,
             parentBounds = parentBounds
         ) {
             owner.bounds = it
         }
-        Layout(
-            content = content,
-            measurePolicy = measurePolicy
-        )
+        properties.insetsConfig.excludeSafeInsets {
+            Layout(
+                content = content,
+                measurePolicy = measurePolicy
+            )
+        }
     }
 }
+
+private val PopupProperties.insetsConfig: InsetsConfig
+    get() = if (usePlatformInsets) PlatformInsetsConfig else ZeroInsetsConfig
 
 private fun Modifier.parentBoundsInWindow(
     onBoundsChanged: (IntRect) -> Unit
@@ -461,23 +476,32 @@ private fun Modifier.parentBoundsInWindow(
 private fun rememberPopupMeasurePolicy(
     popupPositionProvider: PopupPositionProvider,
     properties: PopupProperties,
-    platformOffset: IntOffset,
+    platformInsets: PlatformInsets,
     layoutDirection: LayoutDirection,
     parentBounds: IntRect,
     onBoundsChanged: (IntRect) -> Unit
-) = remember(popupPositionProvider, properties, platformOffset, layoutDirection, parentBounds, onBoundsChanged) {
+) = remember(popupPositionProvider, properties, platformInsets, layoutDirection, parentBounds, onBoundsChanged) {
     RootMeasurePolicy(
-        platformOffset = platformOffset,
+        platformInsets = platformInsets,
         usePlatformDefaultWidth = properties.usePlatformDefaultWidth
     ) { windowSize, contentSize ->
-        var position = popupPositionProvider.calculatePosition(
-            parentBounds, windowSize, layoutDirection, contentSize
-        )
-        if (properties.clippingEnabled) {
-            position = IntOffset(
-                x = position.x.coerceIn(0, windowSize.width - contentSize.width),
-                y = position.y.coerceIn(0, windowSize.height - contentSize.height)
+        val position = positionWithInsets(platformInsets, windowSize) {
+            // Position provider should work with local coordinates.
+            val localBounds = parentBounds.translate(
+                -platformInsets.left.roundToPx(),
+                -platformInsets.top.roundToPx()
             )
+            val localPosition = popupPositionProvider.calculatePosition(
+                localBounds, it, layoutDirection, contentSize
+            )
+            if (properties.clippingEnabled) {
+                IntOffset(
+                    x = localPosition.x.coerceIn(0, it.width - contentSize.width),
+                    y = localPosition.y.coerceIn(0, it.height - contentSize.height)
+                )
+            } else {
+                localPosition
+            }
         }
         onBoundsChanged(IntRect(position, contentSize))
         position
