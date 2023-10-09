@@ -109,11 +109,10 @@ fun ComposeUIViewController(
     configure: ComposeUIViewControllerConfiguration.() -> Unit = {},
     content: @Composable () -> Unit
 ): UIViewController =
-    ComposeWindow().apply {
-        configuration = ComposeUIViewControllerConfiguration()
-            .apply(configure)
-        setContent(content)
-    }
+    ComposeWindow(
+        configuration = ComposeUIViewControllerConfiguration().apply(configure),
+        content = content,
+    )
 
 private class AttachedComposeContext(
     val scene: ComposeScene,
@@ -160,9 +159,11 @@ private class AttachedComposeContext(
 
 @OptIn(InternalComposeApi::class)
 @ExportObjCClass
-internal actual class ComposeWindow : UIViewController {
+private class ComposeWindow(
+    private val configuration: ComposeUIViewControllerConfiguration,
+    private val content: @Composable () -> Unit
+) : UIViewController(nibName = null, bundle = null) {
 
-    internal lateinit var configuration: ComposeUIViewControllerConfiguration
     private val keyboardOverlapHeightState = mutableStateOf(0f)
     private var isInsideSwiftUI = false
     private var safeAreaState by mutableStateOf(PlatformInsets())
@@ -203,12 +204,6 @@ internal actual class ComposeWindow : UIViewController {
         isWindowFocused = true
     }
 
-    @OverrideInit
-    actual constructor() : super(nibName = null, bundle = null)
-
-    @OverrideInit
-    constructor(coder: NSCoder) : super(coder)
-
     private val fontScale: Float
         get() {
             val contentSizeCategory =
@@ -222,8 +217,6 @@ internal actual class ComposeWindow : UIViewController {
             attachedComposeContext?.view?.contentScaleFactor?.toFloat() ?: 1f,
             fontScale
         )
-
-    private lateinit var content: @Composable () -> Unit
 
     private var attachedComposeContext: AttachedComposeContext? = null
 
@@ -507,13 +500,7 @@ internal actual class ComposeWindow : UIViewController {
         super.didReceiveMemoryWarning()
     }
 
-    actual fun setContent(
-        content: @Composable () -> Unit
-    ) {
-        this.content = content
-    }
-
-    actual fun dispose() {
+    private fun dispose() {
         attachedComposeContext?.dispose()
         attachedComposeContext = null
     }
