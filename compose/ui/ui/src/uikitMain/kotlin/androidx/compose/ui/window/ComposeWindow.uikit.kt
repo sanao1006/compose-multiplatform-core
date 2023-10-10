@@ -46,6 +46,7 @@ import androidx.compose.ui.uikit.*
 import androidx.compose.ui.unit.*
 import kotlin.math.absoluteValue
 import androidx.compose.ui.util.fastMap
+import androidx.compose.ui.window.new.*
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -108,13 +109,24 @@ fun ComposeUIViewController(content: @Composable () -> Unit): UIViewController =
 fun ComposeUIViewController(
     configure: ComposeUIViewControllerConfiguration.() -> Unit = {},
     content: @Composable () -> Unit
-): UIViewController =
-    ComposeWindow(
-        configuration = ComposeUIViewControllerConfiguration().apply(configure),
+): UIViewController {
+    var composeWindow: ComposeWindow? = null
+    val configuration = ComposeUIViewControllerConfiguration().apply(configure)
+    return ComposeWindow(
+        configuration = configuration,
         content = content,
-    )
+        keyboardVisibilityListener = KeyboardVisibilityListenerImpl(
+            viewProvider = { composeWindow!!.view },
+            configuration = configuration,
+            attachedComposeContextProvider = { composeWindow!!.attachedComposeContext },
+            densityProvider = { composeWindow!!.density }
+        ),
+    ).also {
+        composeWindow = it
+    }
+}
 
-private class AttachedComposeContext(
+internal class AttachedComposeContext(
     val scene: ComposeScene,
     val view: SkikoUIView,
     val interopContext: UIKitInteropContext
@@ -161,10 +173,10 @@ private class AttachedComposeContext(
 @ExportObjCClass
 private class ComposeWindow(
     private val configuration: ComposeUIViewControllerConfiguration,
-    private val content: @Composable () -> Unit
+    private val content: @Composable () -> Unit,
+    private val keyboardVisibilityListener: KeyboardVisibilityListener,
 ) : UIViewController(nibName = null, bundle = null) {
 
-    private val keyboardOverlapHeightState = mutableStateOf(0f)
     private var isInsideSwiftUI = false
     private var safeAreaState by mutableStateOf(PlatformInsets())
     private var layoutMarginsState by mutableStateOf(PlatformInsets())
@@ -212,90 +224,25 @@ private class ComposeWindow(
             return uiContentSizeCategoryToFontScaleMap[contentSizeCategory] ?: 1.0f
         }
 
-    private val density: Density
+    val density: Density
         get() = Density(
             attachedComposeContext?.view?.contentScaleFactor?.toFloat() ?: 1f,
             fontScale
         )
 
-    private var attachedComposeContext: AttachedComposeContext? = null
+    var attachedComposeContext: AttachedComposeContext? = null
 
-    private val keyboardVisibilityListener = object : NSObject() {
+    private val nativeKeyboardVisibilityListener = object : NSObject() {
         @Suppress("unused")
         @ObjCAction
         fun keyboardWillShow(arg: NSNotification) {
-            val keyboardInfo = arg.userInfo!!["UIKeyboardFrameEndUserInfoKey"] as NSValue
-            val keyboardHeight = keyboardInfo.CGRectValue().useContents { size.height }
-            val screenHeight = UIScreen.mainScreen.bounds.useContents { size.height }
-
-            val composeViewBottomY = UIScreen.mainScreen.coordinateSpace.convertPoint(
-                point = CGPointMake(0.0, view.frame.useContents { size.height }),
-                fromCoordinateSpace = view.coordinateSpace
-            ).useContents { y }
-            val bottomIndent = screenHeight - composeViewBottomY
-
-            if (bottomIndent < keyboardHeight) {
-                keyboardOverlapHeightState.value = (keyboardHeight - bottomIndent).toFloat()
-            }
-
-            val scene = attachedComposeContext?.scene ?: return
-
-            if (configuration.onFocusBehavior == OnFocusBehavior.FocusableAboveKeyboard) {
-                val focusedRect = scene.mainOwner?.focusOwner?.getFocusRect()?.toDpRect(density)
-
-                if (focusedRect != null) {
-                    updateViewBounds(
-                        offsetY = calcFocusedLiftingY(focusedRect, keyboardHeight)
-                    )
-                }
-            }
+            keyboardVisibilityListener.keyboardWillShow(arg)
         }
 
         @Suppress("unused")
         @ObjCAction
         fun keyboardWillHide(arg: NSNotification) {
-            keyboardOverlapHeightState.value = 0f
-            if (configuration.onFocusBehavior == OnFocusBehavior.FocusableAboveKeyboard) {
-                updateViewBounds(offsetY = 0.0)
-            }
-        }
-
-        private fun calcFocusedLiftingY(focusedRect: DpRect, keyboardHeight: Double): Double {
-            val viewHeight = attachedComposeContext?.view?.frame?.useContents {
-                size.height
-            } ?: 0.0
-
-            val hiddenPartOfFocusedElement: Double =
-                keyboardHeight - viewHeight + focusedRect.bottom.value
-            return if (hiddenPartOfFocusedElement > 0) {
-                // If focused element is partially hidden by the keyboard, we need to lift it upper
-                val focusedTopY = focusedRect.top.value
-                val isFocusedElementRemainsVisible = hiddenPartOfFocusedElement < focusedTopY
-                if (isFocusedElementRemainsVisible) {
-                    // We need to lift focused element to be fully visible
-                    hiddenPartOfFocusedElement
-                } else {
-                    // In this case focused element height is bigger than remain part of the screen after showing the keyboard.
-                    // Top edge of focused element should be visible. Same logic on Android.
-                    maxOf(focusedTopY, 0f).toDouble()
-                }
-            } else {
-                // Focused element is not hidden by the keyboard.
-                0.0
-            }
-        }
-
-        private fun updateViewBounds(offsetX: Double = 0.0, offsetY: Double = 0.0) {
-            view.layer.setBounds(
-                view.frame.useContents {
-                    CGRectMake(
-                        x = offsetX,
-                        y = offsetY,
-                        width = size.width,
-                        height = size.height
-                    )
-                }
-            )
+            keyboardVisibilityListener.keyboardWillHide(arg)
         }
     }
 
@@ -448,14 +395,14 @@ private class ComposeWindow(
         super.viewDidAppear(animated)
 
         NSNotificationCenter.defaultCenter.addObserver(
-            observer = keyboardVisibilityListener,
-            selector = NSSelectorFromString(keyboardVisibilityListener::keyboardWillShow.name + ":"),
+            observer = nativeKeyboardVisibilityListener,
+            selector = NSSelectorFromString(nativeKeyboardVisibilityListener::keyboardWillShow.name + ":"),
             name = UIKeyboardWillShowNotification,
             `object` = null
         )
         NSNotificationCenter.defaultCenter.addObserver(
-            observer = keyboardVisibilityListener,
-            selector = NSSelectorFromString(keyboardVisibilityListener::keyboardWillHide.name + ":"),
+            observer = nativeKeyboardVisibilityListener,
+            selector = NSSelectorFromString(nativeKeyboardVisibilityListener::keyboardWillHide.name + ":"),
             name = UIKeyboardWillHideNotification,
             `object` = null
         )
@@ -1101,7 +1048,7 @@ private class ComposeWindow(
                 CompositionLocalProvider(
                     LocalLayerContainer provides view,
                     LocalUIViewController provides this,
-                    LocalKeyboardOverlapHeightState provides keyboardOverlapHeightState,
+                    LocalKeyboardOverlapHeightState provides keyboardVisibilityListener.keyboardOverlapHeightState,
                     LocalSafeArea provides safeAreaState,
                     LocalLayoutMargins provides layoutMarginsState,
                     LocalInterfaceOrientationState provides interfaceOrientationState,
