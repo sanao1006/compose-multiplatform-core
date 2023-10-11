@@ -53,6 +53,11 @@ internal interface SkikoUIViewDelegate {
     fun retrieveInteropTransaction(): UIKitInteropTransaction
 
     fun render(canvas: Canvas, targetTimestamp: NSTimeInterval)
+
+    /**
+     * A callback invoked when [UIView.didMoveToWindow] receives non null window
+     */
+    fun onAttachedToWindow() {}
 }
 
 internal enum class UITouchesEventPhase {
@@ -194,6 +199,9 @@ internal class SkikoUIView : UIView {
         window?.screen?.let {
             contentScaleFactor = it.scale
             _redrawer.maximumFramesPerSecond = it.maximumFramesPerSecond
+        }
+        if (window != null) {
+            delegate?.onAttachedToWindow()
         }
     }
 

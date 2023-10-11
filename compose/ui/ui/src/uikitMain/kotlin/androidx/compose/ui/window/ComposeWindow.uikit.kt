@@ -982,6 +982,7 @@ private class ComposeWindow(
             density = density,
             invalidate = skikoUIView::needRedraw,
         )
+        val isReadyToShowContent = mutableStateOf(false)
 
         skikoUIViewDelegate = object : SkikoUIViewDelegate {
             override fun onKeyboardEvent(event: SkikoKeyboardEvent) {
@@ -1038,6 +1039,11 @@ private class ComposeWindow(
 
                 scene.render(canvas, nanos)
             }
+
+            override fun onAttachedToWindow() {
+                attachedComposeContext!!.scene.density = density
+                isReadyToShowContent.value = true
+            }
         }
         skikoUIView.delegate = skikoUIViewDelegate
 
@@ -1045,6 +1051,7 @@ private class ComposeWindow(
             onPreviewKeyEvent = inputServices::onPreviewKeyEvent,
             onKeyEvent = { false },
             content = {
+                if (!isReadyToShowContent.value) return@setContent
                 CompositionLocalProvider(
                     LocalLayerContainer provides view,
                     LocalUIViewController provides this,
@@ -1054,12 +1061,10 @@ private class ComposeWindow(
                     LocalInterfaceOrientationState provides interfaceOrientationState,
                     LocalSystemTheme provides systemTheme.value,
                     LocalUIKitInteropContext provides interopContext,
-                ) {
-                    content()
-                }
+                    content = content
+                )
             },
         )
-
 
         attachedComposeContext =
             AttachedComposeContext(scene, skikoUIView, interopContext).also {
