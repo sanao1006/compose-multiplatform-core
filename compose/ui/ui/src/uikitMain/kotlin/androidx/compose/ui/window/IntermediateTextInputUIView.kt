@@ -18,6 +18,7 @@ package androidx.compose.ui.window
 
 import androidx.compose.ui.platform.IOSSkikoInput
 import androidx.compose.ui.platform.SkikoUITextInputTraits
+import androidx.compose.ui.window.di.KeyboardEventHandler
 import kotlinx.cinterop.*
 import platform.CoreGraphics.*
 import platform.Foundation.*
@@ -31,23 +32,22 @@ import org.jetbrains.skiko.SkikoPointer
 
 @Suppress("CONFLICTING_OVERLOADS")
 @ExportObjCClass
-internal class IntermediateTextInputUIView : UIView, UIKeyInputProtocol, UITextInputProtocol {
+internal class IntermediateTextInputUIView(
+    private val keyboardEventHandler: KeyboardEventHandler,
+) : UIView(frame = CGRectZero.readValue()), UIKeyInputProtocol, UITextInputProtocol {
     companion object : UIViewMeta() {
         override fun layerClass() = CAMetalLayer
     }
 
-    @Suppress("UNUSED") // required for Objective-C
-    @OverrideInit
-    constructor(coder: NSCoder) : super(coder) {
-        throw UnsupportedOperationException("init(coder: NSCoder) is not supported for SkikoUIView")
-    }
+//    @Suppress("UNUSED") // required for Objective-C
+//    @OverrideInit
+//    constructor(coder: NSCoder) : super(coder) {
+//        throw UnsupportedOperationException("init(coder: NSCoder) is not supported for SkikoUIView")
+//    }
 
     var input: IOSSkikoInput? = null
     var inputTraits: SkikoUITextInputTraits = object : SkikoUITextInputTraits {}
     private var _inputDelegate: UITextInputDelegateProtocol? = null
-    var delegate: SkikoUIViewDelegate? = null
-
-    constructor() : super(frame = CGRectZero.readValue())
 
     /**
      * A Boolean value that indicates whether the text-entry object has any text.
@@ -83,7 +83,7 @@ internal class IntermediateTextInputUIView : UIView, UIKeyInputProtocol, UITextI
             for (press in withEvent.allPresses) {
                 val uiPress = press as? UIPress
                 if (uiPress != null) {
-                    delegate?.onKeyboardEvent(
+                    keyboardEventHandler.onKeyboardEvent(
                         toSkikoKeyboardEvent(press, SkikoKeyboardEventKind.DOWN)
                     )
                 }
@@ -97,7 +97,7 @@ internal class IntermediateTextInputUIView : UIView, UIKeyInputProtocol, UITextI
             for (press in withEvent.allPresses) {
                 val uiPress = press as? UIPress
                 if (uiPress != null) {
-                    delegate?.onKeyboardEvent(
+                    keyboardEventHandler.onKeyboardEvent(
                         toSkikoKeyboardEvent(press, SkikoKeyboardEventKind.UP)
                     )
                 }

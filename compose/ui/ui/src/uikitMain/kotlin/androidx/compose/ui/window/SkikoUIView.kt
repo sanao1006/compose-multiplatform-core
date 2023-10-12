@@ -16,11 +16,10 @@
 
 package androidx.compose.ui.window
 
-import androidx.compose.ui.interop.UIKitInteropAction
 import androidx.compose.ui.interop.UIKitInteropTransaction
-import androidx.compose.ui.platform.IOSSkikoInput
-import androidx.compose.ui.platform.SkikoUITextInputTraits
 import androidx.compose.ui.platform.TextActions
+import androidx.compose.ui.window.di.KeyboardEventHandler
+import androidx.compose.ui.window.di.SkikoUIViewDelegate
 import kotlinx.cinterop.*
 import org.jetbrains.skia.Rect
 import platform.CoreGraphics.*
@@ -30,35 +29,11 @@ import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLPixelFormatBGRA8Unorm
 import platform.QuartzCore.CAMetalLayer
 import platform.UIKit.*
-import platform.darwin.NSInteger
-import org.jetbrains.skia.Surface
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.SkikoInputModifiers
 import org.jetbrains.skiko.SkikoKey
 import org.jetbrains.skiko.SkikoKeyboardEvent
 import org.jetbrains.skiko.SkikoKeyboardEventKind
-import org.jetbrains.skiko.SkikoPointer
-import org.jetbrains.skiko.SkikoPointerDevice
-import org.jetbrains.skiko.SkikoPointerEvent
-import org.jetbrains.skiko.SkikoPointerEventKind
-
-
-internal interface SkikoUIViewDelegate {
-    fun onKeyboardEvent(event: SkikoKeyboardEvent)
-
-    fun pointInside(point: CValue<CGPoint>, event: UIEvent?): Boolean
-
-    fun onTouchesEvent(view: UIView, event: UIEvent, phase: UITouchesEventPhase)
-
-    fun retrieveInteropTransaction(): UIKitInteropTransaction
-
-    fun render(canvas: Canvas, targetTimestamp: NSTimeInterval)
-
-    /**
-     * A callback invoked when [UIView.didMoveToWindow] receives non null window
-     */
-    fun onAttachedToWindow() {}
-}
 
 internal enum class UITouchesEventPhase {
     BEGAN, MOVED, ENDED, CANCELLED
@@ -66,18 +41,19 @@ internal enum class UITouchesEventPhase {
 
 @Suppress("CONFLICTING_OVERLOADS")
 @ExportObjCClass
-internal class SkikoUIView : UIView {
+internal class SkikoUIView(
+    private val delegate: SkikoUIViewDelegate,
+    private val keyboardEventHandler: KeyboardEventHandler,
+) : UIView(frame = CGRectZero.readValue()) {
     companion object : UIViewMeta() {
         override fun layerClass() = CAMetalLayer
     }
 
-    @Suppress("UNUSED") // required for Objective-C
-    @OverrideInit
-    constructor(coder: NSCoder) : super(coder) {
-        throw UnsupportedOperationException("init(coder: NSCoder) is not supported for SkikoUIView")
-    }
-
-    var delegate: SkikoUIViewDelegate? = null//todo duplicate
+//    @Suppress("UNUSED") // required for Objective-C
+//    @OverrideInit
+//    constructor(coder: NSCoder) : super(coder) {
+//        throw UnsupportedOperationException("init(coder: NSCoder) is not supported for SkikoUIView")
+//    }
 
     private val _device: MTLDeviceProtocol =
         MTLCreateSystemDefaultDevice() ?: throw IllegalStateException("Metal is not supported on this system")
@@ -109,8 +85,6 @@ internal class SkikoUIView : UIView {
 
             _redrawer.needsProactiveDisplayLink = needHighFrequencyPolling
         }
-
-    constructor() : super(frame = CGRectZero.readValue())
 
     init {
         multipleTouchEnabled = true
@@ -233,7 +207,7 @@ internal class SkikoUIView : UIView {
             for (press in withEvent.allPresses) {
                 val uiPress = press as? UIPress
                 if (uiPress != null) {
-                    delegate?.onKeyboardEvent(
+                    keyboardEventHandler.onKeyboardEvent(
                         toSkikoKeyboardEvent(press, SkikoKeyboardEventKind.DOWN)
                     )
                 }
@@ -247,7 +221,7 @@ internal class SkikoUIView : UIView {
             for (press in withEvent.allPresses) {
                 val uiPress = press as? UIPress
                 if (uiPress != null) {
-                    delegate?.onKeyboardEvent(
+                    keyboardEventHandler.onKeyboardEvent(
                         toSkikoKeyboardEvent(press, SkikoKeyboardEventKind.UP)
                     )
                 }

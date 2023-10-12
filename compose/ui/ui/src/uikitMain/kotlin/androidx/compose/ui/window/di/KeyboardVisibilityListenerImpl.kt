@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.window.new
+package androidx.compose.ui.window.di
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -32,13 +32,6 @@ import platform.Foundation.NSValue
 import platform.UIKit.CGRectValue
 import platform.UIKit.UIScreen
 import platform.UIKit.UIView
-
-internal interface KeyboardVisibilityListener {
-    fun keyboardWillShow(arg: NSNotification)
-    fun keyboardWillHide(arg: NSNotification)
-
-    val keyboardOverlapHeightState: MutableState<Float>
-}
 
 internal class KeyboardVisibilityListenerImpl(
     val viewProvider: () -> UIView,
