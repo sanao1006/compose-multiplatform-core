@@ -111,6 +111,26 @@ fun ComposeUIViewController(
     val keyEventHandler = KeyEventHandlerImpl(
         inputService = inputService
     )
+    val windowInfo = WindowInfoImpl().apply {
+        isWindowFocused = true
+    }
+    val skikoUIView = SkikoUIView(
+        delegate = skikoViewDelegate,
+        keyboardEventHandler = keyboardEventHandler,
+    )
+    val textMenuView = object : TextMenuView {
+        override fun showTextMenu(targetRect: org.jetbrains.skia.Rect, textActions: TextActions) =
+            skikoUIView.showTextMenu(targetRect, textActions)
+
+        override fun hideTextMenu() = skikoUIView.hideTextMenu()
+        override fun isTextMenuShown(): Boolean = skikoUIView.isTextMenuShown()
+    }
+    val platform = PlatformImpl(
+        windowInfo = windowInfo,
+        textInputService = inputService,
+        densityProvider = densityProvider,
+        textMenuView = textMenuView,
+    )
     return ComposeWindow(
         configuration = configuration,
         content = content,
@@ -125,6 +145,8 @@ fun ComposeUIViewController(
         delegate = skikoViewDelegate,
         keyboardEventHandler = keyboardEventHandler,
         isReadyToShowContent = isReadyToShowContent,
+        platform = platform,
+        skikoUIView = skikoUIView,
     ).also {
         composeWindow = it
     }
@@ -184,6 +206,8 @@ private class ComposeWindow(
     private val delegate: SkikoUIViewDelegate,
     private val keyboardEventHandler: KeyboardEventHandler,
     private val isReadyToShowContent: MutableState<Boolean>,
+    private val platform: Platform,
+    private val skikoUIView: SkikoUIView,//TODO interface
 ) : UIViewController(nibName = null, bundle = null) {
 
     lateinit var scene: ComposeScene //todo lateinit
@@ -225,14 +249,6 @@ private class ComposeWindow(
     private val _windowInfo = WindowInfoImpl().apply {
         isWindowFocused = true
     }
-
-    private val fontScale: Float
-        get() {
-            val contentSizeCategory =
-                traitCollection.preferredContentSizeCategory ?: UIContentSizeCategoryUnspecified
-
-            return uiContentSizeCategoryToFontScaleMap[contentSizeCategory] ?: 1.0f
-        }
 
     val density: Density
         get() = Density(
@@ -469,70 +485,10 @@ private class ComposeWindow(
             return // already attached
         }
 
-        val skikoUIView = SkikoUIView(
-            delegate = delegate,
-            keyboardEventHandler = keyboardEventHandler,
-        )
-
         val interopContext = UIKitInteropContext(requestRedraw = skikoUIView::needRedraw)
 
         skikoUIView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(skikoUIView)
-
-        val platform = object : Platform by Platform.Empty {
-            override val windowInfo: WindowInfo
-                get() = _windowInfo
-            override val textInputService: PlatformTextInputService = inputService
-            override val viewConfiguration =
-                object : ViewConfiguration {
-                    override val longPressTimeoutMillis: Long get() = 500
-                    override val doubleTapTimeoutMillis: Long get() = 300
-                    override val doubleTapMinTimeMillis: Long get() = 40
-
-                    // this value is originating from iOS 16 drag behavior reverse engineering
-                    override val touchSlop: Float get() = with(density) { 10.dp.toPx() }
-                }
-            override val textToolbar = object : TextToolbar {
-                override fun showMenu(
-                    rect: Rect,
-                    onCopyRequested: (() -> Unit)?,
-                    onPasteRequested: (() -> Unit)?,
-                    onCutRequested: (() -> Unit)?,
-                    onSelectAllRequested: (() -> Unit)?
-                ) {
-                    val skiaRect = with(density) {
-                        org.jetbrains.skia.Rect.makeLTRB(
-                            l = rect.left / density,
-                            t = rect.top / density,
-                            r = rect.right / density,
-                            b = rect.bottom / density,
-                        )
-                    }
-                    skikoUIView.showTextMenu(
-                        targetRect = skiaRect,
-                        textActions = object : TextActions {
-                            override val copy: (() -> Unit)? = onCopyRequested
-                            override val cut: (() -> Unit)? = onCutRequested
-                            override val paste: (() -> Unit)? = onPasteRequested
-                            override val selectAll: (() -> Unit)? = onSelectAllRequested
-                        }
-                    )
-                }
-
-                /**
-                 * TODO on UIKit native behaviour is hide text menu, when touch outside
-                 */
-                override fun hide() = skikoUIView.hideTextMenu()
-
-                override val status: TextToolbarStatus
-                    get() = if (skikoUIView.isTextMenuShown())
-                        TextToolbarStatus.Shown
-                    else
-                        TextToolbarStatus.Hidden
-            }
-
-            override val inputModeManager = DefaultInputModeManager(InputMode.Touch)
-        }
 
         scene = ComposeScene(
             coroutineContext = Dispatchers.Main,
@@ -596,3 +552,11 @@ private fun UIUserInterfaceStyle.asComposeSystemTheme(): SystemTheme {
         else -> SystemTheme.Unknown
     }
 }
+
+internal val UIViewController.fontScale: Float
+    get() {
+        val contentSizeCategory =
+            traitCollection.preferredContentSizeCategory ?: UIContentSizeCategoryUnspecified
+
+        return uiContentSizeCategoryToFontScaleMap[contentSizeCategory] ?: 1.0f
+    }

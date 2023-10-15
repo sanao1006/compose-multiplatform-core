@@ -20,6 +20,7 @@ import androidx.compose.ui.interop.UIKitInteropTransaction
 import androidx.compose.ui.platform.TextActions
 import androidx.compose.ui.window.di.KeyboardEventHandler
 import androidx.compose.ui.window.di.SkikoUIViewDelegate
+import androidx.compose.ui.window.di.TextMenuView
 import kotlinx.cinterop.*
 import org.jetbrains.skia.Rect
 import platform.CoreGraphics.*
