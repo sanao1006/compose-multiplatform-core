@@ -131,19 +131,17 @@ fun ComposeUIViewController(
         densityProvider = densityProvider,
         textMenuView = textMenuView,
     )
+    val keyboardVisibilityListener = KeyboardVisibilityListenerImpl(
+        viewProvider = { composeWindow!!.view },
+        configuration = configuration,
+        attachedComposeContextProvider = { composeWindow!!.attachedComposeContext },
+        densityProvider = densityProvider,
+    )
     return ComposeWindow(
         configuration = configuration,
         content = content,
-        keyboardVisibilityListener = KeyboardVisibilityListenerImpl(
-            viewProvider = { composeWindow!!.view },
-            configuration = configuration,
-            attachedComposeContextProvider = { composeWindow!!.attachedComposeContext },
-            densityProvider = densityProvider,
-        ),
+        keyboardVisibilityListener = keyboardVisibilityListener,
         keyEventHandler = keyEventHandler,
-        inputService = inputService,
-        delegate = skikoViewDelegate,
-        keyboardEventHandler = keyboardEventHandler,
         isReadyToShowContent = isReadyToShowContent,
         platform = platform,
         skikoUIView = skikoUIView,
@@ -202,9 +200,6 @@ private class ComposeWindow(
     private val content: @Composable () -> Unit,
     private val keyboardVisibilityListener: KeyboardVisibilityListener,
     private val keyEventHandler: KeyEventHandler,
-    private val inputService: PlatformTextInputService,
-    private val delegate: SkikoUIViewDelegate,
-    private val keyboardEventHandler: KeyboardEventHandler,
     private val isReadyToShowContent: MutableState<Boolean>,
     private val platform: Platform,
     private val skikoUIView: SkikoUIView,//TODO interface
@@ -477,8 +472,6 @@ private class ComposeWindow(
         attachedComposeContext?.dispose()
         attachedComposeContext = null
     }
-
-    private lateinit var skikoUIViewDelegate: SkikoUIViewDelegate
 
     private fun attachComposeIfNeeded() {
         if (attachedComposeContext != null) {
