@@ -35,7 +35,7 @@ struct NestedContentView: View {
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         SwiftHelper().getViewController { index in
-            let viewController = UIHostingController(rootView: NestedContentView(index: index))
+            let viewController = UIHostingController(rootView: NestedContentView(index: Int(index)))
             return viewController
         }
     }
