@@ -19,7 +19,7 @@ fun main(vararg args: String) {
 }
 
 @Composable
-fun IosDemo(arg: String, makeHostingController: (() -> UIViewController)? = null) {
+fun IosDemo(arg: String, makeHostingController: ((Int) -> UIViewController)? = null) {
     val app = remember {
         App(
             extraScreens = listOf(

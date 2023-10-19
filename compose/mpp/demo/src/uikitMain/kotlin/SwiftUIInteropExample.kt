@@ -1,8 +1,17 @@
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.mpp.demo.Screen
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.interop.UIKitViewController
+import androidx.compose.ui.unit.dp
 import platform.UIKit.UIViewController
 
 /*
@@ -21,6 +30,13 @@ import platform.UIKit.UIViewController
  * limitations under the License.
  */
 
-fun SwiftUIInteropExample(makeViewController: () -> UIViewController) = Screen.Example("SwiftUI interop example") {
-    UIKitViewController(makeViewController, Modifier.fillMaxSize())
+fun SwiftUIInteropExample(makeViewController: (Int) -> UIViewController) = Screen.Example("SwiftUI interop example") {
+    LazyColumn(Modifier.fillMaxSize()) {
+        items(20) {
+            UIKitViewController(factory = {
+                makeViewController(it)
+            }, Modifier.fillMaxWidth().height(160.dp))
+            Spacer(Modifier.height(160.dp).background(Color.Green))
+        }
+    }
 }
