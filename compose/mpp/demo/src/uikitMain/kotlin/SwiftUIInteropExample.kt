@@ -36,7 +36,7 @@ fun SwiftUIInteropExample(makeViewController: (Int) -> UIViewController) = Scree
             UIKitViewController(factory = {
                 makeViewController(it)
             }, Modifier.fillMaxWidth().height(160.dp))
-            Spacer(Modifier.height(160.dp).background(Color.Green))
+            Spacer(Modifier.height(160.dp))
         }
     }
 }
