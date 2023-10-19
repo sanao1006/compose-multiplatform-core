@@ -82,9 +82,10 @@ fun <T : UIView> UIKitView(
 ) {
     // TODO: adapt UIKitView to reuse inside LazyColumn like in AndroidView:
     //  https://developer.android.com/reference/kotlin/androidx/compose/ui/viewinterop/package-summary#AndroidView(kotlin.Function1,kotlin.Function1,androidx.compose.ui.Modifier,kotlin.Function1,kotlin.Function1)
+    val rootView = LocalLayerContainer.current
     val embeddedInteropComponent = remember {
         EmbeddedInteropView(
-            rootView = LocalLayerContainer.current,
+            rootView = rootView,
             onRelease
         )
     }
@@ -178,10 +179,12 @@ fun <T : UIViewController> UIKitViewController(
 ) {
     // TODO: adapt UIKitViewController to reuse inside LazyColumn like in AndroidView:
     //  https://developer.android.com/reference/kotlin/androidx/compose/ui/viewinterop/package-summary#AndroidView(kotlin.Function1,kotlin.Function1,androidx.compose.ui.Modifier,kotlin.Function1,kotlin.Function1)
+    val rootView = LocalLayerContainer.current
+    val rootViewController = LocalUIViewController.current
     val embeddedInteropComponent = remember {
         EmbeddedInteropViewController(
-            rootView = LocalLayerContainer.current,
-            rootViewController = LocalUIViewController.current,
+            rootView,
+            rootViewController,
             onRelease
         )
     }
