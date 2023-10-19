@@ -159,7 +159,7 @@ fun <T : UIView> UIKitView(
  * @param modifier The modifier to be applied to the layout. Size should be specified in modifier.
  * Modifier may contains crop() modifier with different shapes.
  * @param update A callback to be invoked after the layout is inflated.
- * @param background A color of [UIView] background wrapping the [UIViewController] view created by [factory].
+ * @param background A color of [UIView] background wrapping the view of [UIViewController] created by [factory].
  * @param onRelease A callback invoked as a signal that this view controller instance has exited the
  * composition hierarchy entirely and will not be reused again. Any additional resources used by the
  * view controller should be freed at this time.
