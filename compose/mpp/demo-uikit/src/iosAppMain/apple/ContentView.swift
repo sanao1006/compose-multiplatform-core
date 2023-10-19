@@ -24,9 +24,18 @@ struct ContentView: View {
     }
 }
 
+struct NestedContentView: View {
+    var body: some View {
+        Text("Hello from SwiftUI")
+    }
+}
+
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
-        SwiftHelper().getViewController()
+        SwiftHelper().getViewController {
+            let viewController = UIHostingController(rootView: NestedContentView())
+            return viewController
+        }
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
