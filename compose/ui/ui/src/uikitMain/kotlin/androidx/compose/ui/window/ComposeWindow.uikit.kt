@@ -86,8 +86,9 @@ fun ComposeUIViewController(
     content: @Composable () -> Unit
 ): UIViewController {
     var composeWindow: ComposeWindow? = null
-    val densityProvider = { composeWindow!!.density }
-    val sceneProvider = {composeWindow!!.scene}
+    fun requireComposeWindow() = composeWindow ?: error("TODO message")
+    val densityProvider = { requireComposeWindow().density }
+    val sceneProvider = {requireComposeWindow().scene}
     val configuration = ComposeUIViewControllerConfiguration().apply(configure)
     val isReadyToShowContent = mutableStateOf(false)
     val interopContext = UIKitInteropContext(
@@ -97,15 +98,15 @@ fun ComposeUIViewController(
         densityProvider = densityProvider,
         sceneProvider = sceneProvider,
         interopContext = interopContext,
-        attachedComposeContextProvider = { composeWindow!!.attachedComposeContext!! },
+        attachedComposeContextProvider = { requireComposeWindow().attachedComposeContext!! },
         isReadyToShowContent = isReadyToShowContent
     )
     val keyboardEventHandler = KeyboardEventHandlerImpl(
         sceneProvider = sceneProvider
     )
     val inputService = InputServiceImpl(
-        rootViewProvider = { composeWindow!!.view },
-        skikoUIViewProvider = { composeWindow!!.attachedComposeContext!!.view },
+        rootViewProvider = { requireComposeWindow().view },
+        skikoUIViewProvider = { requireComposeWindow().attachedComposeContext!!.view },
         keyboardEventHandler = keyboardEventHandler
     )
     val keyEventHandler = KeyEventHandlerImpl(
@@ -205,7 +206,8 @@ private class ComposeWindow(
     private val skikoUIView: SkikoUIView,//TODO interface
 ) : UIViewController(nibName = null, bundle = null) {
 
-    lateinit var scene: ComposeScene //todo lateinit
+    lateinit var scene: ComposeScene //todo lateinit is bad.
+        private set
     private var isInsideSwiftUI = false
     private var safeAreaState by mutableStateOf(PlatformInsets())
     private var layoutMarginsState by mutableStateOf(PlatformInsets())
@@ -331,7 +333,7 @@ private class ComposeWindow(
                 height = (size.height * scale).roundToInt()
             )
         }
-        _windowInfo.containerSize = size
+        _windowInfo.containerSize = size //todo check it again
         context.scene.density = density
         context.scene.constraints = Constraints(
             maxWidth = size.width,
