@@ -25,17 +25,16 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
 
 /**
- * Sets the cursor offset when the TextField is focused in a Cupertino style.
- * Cursor offset depends on position of the cursor and content of the textfield.
+ * Sets and adjusts the cursor offset when the TextField is focused in a Cupertino style.
+ * Cursor final offset depends on position of the cursor and content of the textfield.
  *
  * See **determineCursorDesiredPosition()** for more details.
- *
- * @param position The position of the cursor.
- * @param textLayoutResult The result of the text layout.
- * @param editProcessor The edit processor.
- * @param offsetMapping The offset mapping.
- * @param showContextMenu A callback function to show the context menu at a given rect.
- * @param onValueChange A callback function to handle the change in TextField value.
+ * @param position The position of the cursor in the TextField.
+ * @param textLayoutResult The TextLayoutResultProxy object that contains the layout information of the TextField text.
+ * @param editProcessor The EditProcessor object that manages the editing operations of the TextField.
+ * @param offsetMapping The OffsetMapping object that maps the transformed offset to the original offset.
+ * @param showContextMenu The function that displays the context menu at the given rectangular area.
+ * @param onValueChange The function that is called when the TextField value changes.
  */
 internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
     position: Offset,
@@ -57,38 +56,13 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
         currentText
     )
 
-    val caretOffsetPosition: Int
-    when (caretDesiredPosition) {
-        TextCursorDesiredPosition.Same -> {
-            /* Menu with context actions should be opened by tap on the caret,
-         * caret should remain on the same position.
-         */
-            showContextMenu(textLayoutResult.value.getCursorRect(offset))
-            caretOffsetPosition = offset
-        }
-        TextCursorDesiredPosition.BeforeWord -> {
-            val wordBoundary = textLayoutResult.value.getWordBoundary(offset)
-            caretOffsetPosition = wordBoundary.start
-        }
-        TextCursorDesiredPosition.AfterWord -> {
-            val wordBoundary = textLayoutResult.value.getWordBoundary(offset)
-            caretOffsetPosition = wordBoundary.end
-        }
-        TextCursorDesiredPosition.BeforeNextWord -> {
-            val nextWordBoundary = findNextWordBoundary(offset, currentText, textLayoutResult)
-            caretOffsetPosition = nextWordBoundary.start
-        }
-        TextCursorDesiredPosition.LineStart -> {
-            val lineNumber = textLayoutResult.value.getLineForOffset(offset)
-            caretOffsetPosition = textLayoutResult.value.getLineStart(lineNumber)
-        }
-        TextCursorDesiredPosition.LineEnd -> {
-            val lineNumber = textLayoutResult.value.getLineForOffset(offset)
-            caretOffsetPosition = textLayoutResult.value.getLineEnd(lineNumber)
-        }
+    if (caretDesiredPosition == offset) {
+        showContextMenu(textLayoutResult.value.getCursorRect(offset))
     }
 
-    onValueChange(editProcessor.toTextFieldValue().copy(selection = TextRange(caretOffsetPosition)))
+    onValueChange(
+        editProcessor.toTextFieldValue().copy(selection = TextRange(caretDesiredPosition))
+    )
 }
 
 /**
@@ -102,54 +76,38 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
  * - When you make a single tap on the first letter of the word, the caret is placed before this word.
  * - If you tap on the left edge of the TextField, the caret is placed before the first word on this line. The same is for the right edge.
  * - If you tap at the caret, that is placed in the middle of the word, it will jump to the end of the word.
- *
- * @param offset The offset of the tapped position.
+ * @param offset The current offset position.
  * @param currentValue The current TextFieldValue.
- * @param textLayoutResult The TextLayoutResultProxy object representing the text layout.
- * @param currentText The current text string.
- *
- * @return The CaretMovementPosition indicating the desired caret movement position.
+ * @param textLayoutResult The TextLayoutResultProxy representing the layout of the text.
+ * @param currentText The current text in the TextField.
+ * @return The desired cursor position after evaluating the given parameters.
  */
 internal fun determineCursorDesiredPosition(
     offset: Int,
     currentValue: TextFieldValue,
     textLayoutResult: TextLayoutResultProxy,
     currentText: String
-): TextCursorDesiredPosition {
+): Int {
+    val caretOffsetPosition: Int
     if (isCaretTapped(offset, currentValue.selection.start)) {
-        return TextCursorDesiredPosition.Same
+        caretOffsetPosition = offset
     } else if (textLayoutResult.isLeftEdgeTapped(offset)) {
-        return TextCursorDesiredPosition.LineStart
+        val lineNumber = textLayoutResult.value.getLineForOffset(offset)
+        caretOffsetPosition = textLayoutResult.value.getLineStart(lineNumber)
     } else if (textLayoutResult.isRightEdgeTapped(offset)) {
-        return TextCursorDesiredPosition.LineEnd
+        val lineNumber = textLayoutResult.value.getLineForOffset(offset)
+        caretOffsetPosition = textLayoutResult.value.getLineEnd(lineNumber)
     } else if (isPunctuationOrSpaceBeforeWordTapped(offset, currentText)) {
-        return TextCursorDesiredPosition.BeforeNextWord
+        val nextWordBoundary = findNextWordBoundary(offset, currentText, textLayoutResult)
+        caretOffsetPosition = nextWordBoundary.start
     } else if (textLayoutResult.isFirstLetterOfWordTapped(offset)) {
-        return TextCursorDesiredPosition.BeforeWord
+        val wordBoundary = textLayoutResult.value.getWordBoundary(offset)
+        caretOffsetPosition = wordBoundary.start
+    } else {
+        val wordBoundary = textLayoutResult.value.getWordBoundary(offset)
+        caretOffsetPosition = wordBoundary.end
     }
-    return TextCursorDesiredPosition.AfterWord
-}
-
-/**
- * Enum class representing the desired position of the text cursor.
- *
- * The possible positions are:
- * - Same: The cursor remains at the same position.
- * - BeforeWord: The cursor is placed before the current word.
- * - AfterWord: The cursor is placed after the current word.
- * - BeforeNextWord: The cursor is placed before the next word.
- * - LineStart: The cursor is placed at the start of the current line.
- * - LineEnd: The cursor is placed at the end of the current line.
- *
- * The rules for determining can be found in **determineCursorDesiredPosition()** description
- */
-internal enum class TextCursorDesiredPosition {
-    Same,
-    BeforeWord,
-    AfterWord,
-    BeforeNextWord,
-    LineStart,
-    LineEnd
+    return caretOffsetPosition
 }
 
 private fun isPunctuationOrSpaceBeforeWordTapped(
@@ -192,7 +150,6 @@ private fun TextLayoutResultProxy.isRightEdgeTapped(caretOffset: Int): Boolean {
 
 /**
  * Recursively finds the next word boundary position starting from the given caret offset in the current text.
- *
  * The main difference between this and **getWordBoundary()** in *Paragraph.kt* is that
  * this method finds next word boundary in case if caret positioned in between two words
  * (so caret is pointing at punctuation or whitespace), whereas **getWordBoundary()** will return
