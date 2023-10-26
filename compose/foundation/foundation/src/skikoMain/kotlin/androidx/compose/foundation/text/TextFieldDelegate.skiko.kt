@@ -57,7 +57,7 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
     val currentText = currentValue.text
 
     val caretOffsetPosition: Int
-    if (textLayoutResult.isCaretTapped(offset, currentValue.selection.start)) {
+    if (isCaretTapped(offset, currentValue.selection.start)) {
         /* Menu with context actions should be opened by tap on the caret,
          * caret should remain on the same position.
          */
@@ -69,7 +69,7 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
     } else if (textLayoutResult.isRightEdgeTapped(offset)) {
         val lineNumber = textLayoutResult.value.getLineForOffset(offset)
         caretOffsetPosition = textLayoutResult.value.getLineEnd(lineNumber)
-    } else if (textLayoutResult.isPunctuationOrSpaceBeforeWordTapped(offset, currentText)) {
+    } else if (isPunctuationOrSpaceBeforeWordTapped(offset, currentText)) {
         val nextWordBoundary = findNextWordBoundary(offset, currentText, textLayoutResult)
         caretOffsetPosition = nextWordBoundary.start
     } else if (textLayoutResult.isFirstLetterOfWordTapped(offset)) {
@@ -83,7 +83,7 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
     onValueChange(editProcessor.toTextFieldValue().copy(selection = TextRange(caretOffsetPosition)))
 }
 
-private fun TextLayoutResultProxy.isPunctuationOrSpaceBeforeWordTapped(
+private fun isPunctuationOrSpaceBeforeWordTapped(
     caretOffset: Int,
     currentText: String
 ): Boolean {
@@ -102,7 +102,7 @@ private fun TextLayoutResultProxy.isFirstLetterOfWordTapped(caretOffset: Int): B
     return value.getWordBoundary(caretOffset).start == caretOffset
 }
 
-private fun TextLayoutResultProxy.isCaretTapped(
+private fun isCaretTapped(
     caretOffset: Int,
     previousCaretOffset: Int
 ): Boolean {
@@ -117,11 +117,23 @@ private fun TextLayoutResultProxy.isLeftEdgeTapped(caretOffset: Int): Boolean {
 
 private fun TextLayoutResultProxy.isRightEdgeTapped(caretOffset: Int): Boolean {
     val lineNumber = value.getLineForOffset(caretOffset)
-    val lineStartOffset = value.getLineEnd(lineNumber)
-    return lineStartOffset == caretOffset
+    val lineEndOffset = value.getLineEnd(lineNumber)
+    return lineEndOffset == caretOffset
 }
 
-private fun findNextWordBoundary(
+/**
+ * Recursively finds the next word boundary position starting from the given caret offset in the current text.
+ * The main difference between this and **getWordBoundary()** in *Paragraph.kt* is that
+ * this method finds next word boundary in case if caret positioned in between two words
+ * (so caret is pointing at punctuation or whitespace), whereas **getWordBoundary()** will return
+ * empty TextRange with the beginning on caret position
+ *
+ * @param caretOffset the offset of the caret position
+ * @param currentText the current text
+ * @param textLayoutResult the TextLayoutResultProxy object that provides text layout information
+ * @return the TextRange representing the next word boundary position
+ */
+private tailrec fun findNextWordBoundary(
     caretOffset: Int,
     currentText: String,
     textLayoutResult: TextLayoutResultProxy
@@ -131,7 +143,7 @@ private fun findNextWordBoundary(
     return if (!currentChar.isPunctuationOrWhitespace()) {
         wordRange
     } else if (caretOffset >= currentText.lastIndex) {
-        TextRange.Zero
+        TextRange(currentText.lastIndex)
     } else {
         findNextWordBoundary(caretOffset + 1, currentText, textLayoutResult)
     }
