@@ -42,7 +42,7 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.uikit.*
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.UseWorkaround
+import androidx.compose.objc.*
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -526,7 +526,7 @@ internal actual class ComposeWindow : UIViewController {
     override fun viewDidAppear(animated: Boolean) {
         super.viewDidAppear(animated)
 
-        val workaround = UseWorkaround(view)
+        val workaround = CMPAccessibilityElement(view)
         workaround.accessibilityFrame = view.bounds
         view.accessibilityElements = listOf(
             workaround

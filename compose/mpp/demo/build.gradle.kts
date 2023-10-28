@@ -15,8 +15,8 @@
  */
 
 import androidx.build.AndroidXComposePlugin
-import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer
+import org.jetbrains.kotlin.konan.target.KonanTarget
 
 plugins {
     id("AndroidXPlugin")
@@ -48,6 +48,39 @@ repositories {
     mavenLocal()
 }
 
+fun KotlinNativeBinaryContainer.configureMacOSFramework() {
+    executable {
+        entryPoint = "androidx.compose.mpp.demo.main"
+        linkerOpts += listOf(
+            "-framework", "Metal"
+        )
+        // TODO: the current release binary surprises LLVM, so disable checks for now.
+        freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
+    }
+}
+
+fun KotlinNativeBinaryContainer.configureIosFramework() {
+    executable {
+        val isDevice = target.konanTarget == KonanTarget.IOS_ARM64
+        val archive = if (isDevice) "device" else "simulator"
+        val frameworkPath = File(
+            project.rootDir,
+            "compose/ui/ui/src/uikitMain/objc/build/$archive.xcarchive/Products/Library/Frameworks"
+        )
+
+        entryPoint = "androidx.compose.mpp.demo.main"
+        linkerOpts += listOf(
+            "-framework", "Metal",
+            "-framework", "CoreText",
+            "-framework", "CoreGraphics",
+            "-framework", "CMPUIKit",
+            "-F$frameworkPath", "-ObjC"
+        )
+        // TODO: the current compose binary surprises LLVM, so disable checks for now.
+        freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
+    }
+}
+
 kotlin {
     jvm("desktop")
     js(IR) {
@@ -56,68 +89,27 @@ kotlin {
     }
     macosX64() {
         binaries {
-            executable() {
-                entryPoint = "androidx.compose.mpp.demo.main"
-                freeCompilerArgs += listOf(
-                    "-linker-option", "-framework", "-linker-option", "Metal"
-                )
-                // TODO: the current release binary surprises LLVM, so disable checks for now.
-                freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
-            }
+            configureMacOSFramework()
         }
     }
     macosArm64() {
         binaries {
-            executable() {
-                entryPoint = "androidx.compose.mpp.demo.main"
-                freeCompilerArgs += listOf(
-                    "-linker-option", "-framework", "-linker-option", "Metal"
-                )
-                // TODO: the current release binary surprises LLVM, so disable checks for now.
-                freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
-            }
+            configureMacOSFramework()
         }
     }
     iosX64("uikitX64") {
         binaries {
-            executable() {
-                entryPoint = "androidx.compose.mpp.demo.main"
-                freeCompilerArgs += listOf(
-                    "-linker-option", "-framework", "-linker-option", "Metal",
-                    "-linker-option", "-framework", "-linker-option", "CoreText",
-                    "-linker-option", "-framework", "-linker-option", "CoreGraphics"
-                )
-                // TODO: the current compose binary surprises LLVM, so disable checks for now.
-                freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
-            }
+            configureIosFramework()
         }
     }
     iosArm64("uikitArm64") {
         binaries {
-            executable() {
-                entryPoint = "androidx.compose.mpp.demo.main"
-                freeCompilerArgs += listOf(
-                    "-linker-option", "-framework", "-linker-option", "Metal",
-                    "-linker-option", "-framework", "-linker-option", "CoreText",
-                    "-linker-option", "-framework", "-linker-option", "CoreGraphics"
-                )
-                // TODO: the current compose binary surprises LLVM, so disable checks for now.
-                freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
-            }
+            configureIosFramework()
         }
     }
     iosSimulatorArm64("uikitSimArm64") {
         binaries {
-            executable() {
-                entryPoint = "androidx.compose.mpp.demo.main"
-                freeCompilerArgs += listOf(
-                    "-linker-option", "-framework", "-linker-option", "Metal",
-                    "-linker-option", "-framework", "-linker-option", "CoreText",
-                    "-linker-option", "-framework", "-linker-option", "CoreGraphics"
-                )
-                // TODO: the current compose binary surprises LLVM, so disable checks for now.
-                freeCompilerArgs += "-Xdisable-phases=VerifyBitcode"
-            }
+            configureIosFramework()
         }
     }
     sourceSets {

@@ -1,13 +1,3 @@
 package = androidx.compose.objc
+modules = CMPUIKit
 language = Objective-C
----
-
-#import <Foundation/Foundation.h>
-#import <UIKit/UIView.h>
-
-// This protocol helps to override ObjC UIView extensions in Kotlin
-@protocol UIAccessibilityContainerWorkaround
-- (NSInteger)accessibilityElementCount;
-- (id)accessibilityElementAtIndex:(NSInteger)index;
-- (NSInteger)indexOfAccessibilityElement:(id)element;
-@end

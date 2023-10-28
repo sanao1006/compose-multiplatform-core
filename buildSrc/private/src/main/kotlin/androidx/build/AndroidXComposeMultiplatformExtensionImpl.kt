@@ -16,6 +16,7 @@
 
 package androidx.build
 
+import java.io.File
 import javax.inject.Inject
 import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
@@ -27,8 +28,8 @@ import kotlin.reflect.full.memberProperties
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.internal.publication.DefaultMavenPublication
-import org.gradle.kotlin.dsl.creating
-import org.gradle.kotlin.dsl.provideDelegate
+import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.kotlin.konan.target.KonanTarget
 
 import org.jetbrains.kotlin.gradle.targets.js.dsl.ExperimentalWasmDsl
@@ -148,7 +149,7 @@ open class AndroidXComposeMultiplatformExtensionImpl @Inject constructor(
     ): KotlinSourceSet = multiplatformExtension.run {
         sourceSets.findByName(name)
             ?: sourceSets.create(name).apply {
-                    dependsOn(sourceSets.getByName(dependsOnSourceSetName))
+                dependsOn(sourceSets.getByName(dependsOnSourceSetName))
             }
     }
 
@@ -194,10 +195,59 @@ open class AndroidXComposeMultiplatformExtensionImpl @Inject constructor(
 
     override fun configureUIKitCInterop() {
         fun KotlinNativeTarget.configureCInterop() {
+            val isDevice = konanTarget == KonanTarget.IOS_ARM64
+            val frameworkName = "CMPUIKit"
+            val schemeName = frameworkName
+            val objcDir = File(project.projectDir, "src/uikitMain/objc")
+            val defFile = File(objcDir, "ios.def")
+            val frameworkSourcesDir = File(objcDir, frameworkName)
+            val platform = if (isDevice) "device" else "simulator"
+            val buildDir = File(objcDir, "build/$platform.xcarchive")
+            val frameworkPath = File(buildDir, "Products/Library/Frameworks")
+
             compilations.getByName("main") {
-                it.cinterops.create("uikit") {
-                    it.defFile("src/uikitMain/objc/ios.def")
-                    it.packageName("androidx.compose.objc")
+                it.cinterops.create("objc") { settings ->
+                    val taskName = "${settings.interopProcessingTaskName}MakeFramework"
+                    project.tasks.register(taskName, Exec::class.java) { exec ->
+                        exec.inputs.dir(frameworkSourcesDir)
+                            .withPropertyName("$frameworkName-$platform")
+                            .withPathSensitivity(PathSensitivity.RELATIVE)
+
+                        exec.outputs.cacheIf { true }
+                        exec.outputs.dir(buildDir)
+                            .withPropertyName("$frameworkName-$platform-archive")
+
+                        exec.workingDir(frameworkSourcesDir)
+                        exec.commandLine("xcodebuild")
+                        exec.args(
+                            "archive",
+                            "-scheme", schemeName,
+                            "-archivePath", buildDir,
+                            "-sdk", if (isDevice) "iphoneos" else "iphonesimulator",
+                            "-destination", if (isDevice) {
+                                "generic/platform=iOS"
+                            } else {
+                                "generic/platform=iOS Simulator"
+                            },
+                            "SKIP_INSTALL=NO",
+                            "BUILD_LIBRARY_FOR_DISTRIBUTION=YES",
+                            "VALID_ARCHS=" + if (isDevice) "arm64" else "arm64 x86_64",
+                            "MACH_O_TYPE=staticlib"
+                        )
+                    }
+
+                    project.tasks.findByName(settings.interopProcessingTaskName)!!
+                        .dependsOn(taskName)
+
+                    settings.defFile(defFile)
+                    settings.packageName("androidx.compose.objc")
+                    settings.compilerOpts("-framework", frameworkName, "-F$frameworkPath")
+                }
+            }
+
+            binaries {
+                framework {
+                    linkerOpts("-framework", frameworkName, "-F$frameworkPath", "-ObjC")
                 }
             }
         }

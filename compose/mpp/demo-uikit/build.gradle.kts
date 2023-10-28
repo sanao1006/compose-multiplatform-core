@@ -1,8 +1,7 @@
 import androidx.build.AndroidXComposePlugin
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinTargetWithBinaries
+import org.jetbrains.kotlin.konan.target.KonanTarget
 
 plugins {
     id("AndroidXPlugin")
@@ -19,11 +18,19 @@ repositories {
 
 fun KotlinNativeBinaryContainer.configureFramework() {
     framework {
+        val isDevice = target.konanTarget == KonanTarget.IOS_ARM64
+        val archive = if (isDevice) "device" else "simulator"
+        val frameworkPath = File(
+            project.rootDir,
+            "compose/ui/ui/src/uikitMain/objc/build/$archive.xcarchive/Products/Library/Frameworks"
+        )
         baseName = "shared"
-        freeCompilerArgs += listOf(
-            "-linker-option", "-framework", "-linker-option", "Metal",
-            "-linker-option", "-framework", "-linker-option", "CoreText",
-            "-linker-option", "-framework", "-linker-option", "CoreGraphics"
+        linkerOpts += listOf(
+            "-framework", "Metal",
+            "-framework", "CoreText",
+            "-framework", "CoreGraphics",
+            "-framework", "CMPUIKit",
+            "-F$frameworkPath", "-ObjC"
         )
     }
 }
