@@ -148,6 +148,9 @@ internal class FontCache {
     init {
         fonts.setDefaultFontManager(FontMgr.default)
         fonts.setAssetFontManager(fontProvider)
+
+        // FIXME
+        fonts.paragraphCache.setEnabled(false)
     }
 
     private fun mapGenericFontFamily(generic: GenericFontFamily): List<String> {

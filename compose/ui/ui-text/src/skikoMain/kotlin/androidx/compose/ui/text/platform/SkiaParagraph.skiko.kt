@@ -126,7 +126,6 @@ private fun fontSizeInHierarchy(density: Density, base: Float, other: TextUnit):
 // Computed ComputedStyles always have font/letter size in pixels for particular `density`.
 // It's important because density could be changed in runtime, and it should force
 // SkTextStyle to be recalculated. Or we can have different densities in different windows.
-@OptIn(ExperimentalTextApi::class)
 internal data class ComputedStyle(
     var textForegroundStyle: TextForegroundStyle,
     var brushSize: Size,
@@ -146,6 +145,7 @@ internal data class ComputedStyle(
     var drawStyle: DrawStyle?,
     var blendMode: BlendMode,
     var lineHeight: Float?,
+    var isHalfLeading: Boolean,
 ) {
 
     constructor(
@@ -154,6 +154,7 @@ internal data class ComputedStyle(
         brushSize: Size = Size.Unspecified,
         blendMode: BlendMode = DrawScope.DefaultBlendMode,
         lineHeight: TextUnit,
+        isHalfLeading: Boolean,
     ) : this(
         textForegroundStyle = spanStyle.textForegroundStyle,
         brushSize = brushSize,
@@ -184,6 +185,7 @@ internal data class ComputedStyle(
                 }
             }
         } else null,
+        isHalfLeading = isHalfLeading,
     )
 
     private fun toTextPaint(): Paint? = Paint().let {
@@ -248,6 +250,7 @@ internal data class ComputedStyle(
         lineHeight?.let {
             res.height = it / fontSize
         }
+        res.isHalfLeading = isHalfLeading
 
         return res
     }
@@ -321,7 +324,14 @@ internal class ParagraphBuilder(
         initialStyle = textStyle.toSpanStyle().copyWithDefaultFontSize(
             drawStyle = drawStyle
         )
-        defaultStyle = ComputedStyle(density, initialStyle, brushSize, blendMode, textStyle.lineHeight)
+        defaultStyle = ComputedStyle(
+            density = density,
+            spanStyle = initialStyle,
+            brushSize = brushSize,
+            blendMode = blendMode,
+            lineHeight = textStyle.lineHeight,
+            isHalfLeading = textStyle.isHalfLeading
+        )
         ops = makeOps(
             spanStyles,
             placeholders
@@ -501,7 +511,14 @@ internal class ParagraphBuilder(
 
     private fun mergeStyles(activeStyles: List<SpanStyle>): ComputedStyle {
         // there is always at least one active style
-        val style = ComputedStyle(density, activeStyles[0], brushSize, blendMode, textStyle.lineHeight)
+        val style = ComputedStyle(
+            density = density,
+            spanStyle = activeStyles[0],
+            brushSize = brushSize,
+            blendMode = blendMode,
+            lineHeight = textStyle.lineHeight,
+            isHalfLeading = textStyle.isHalfLeading
+        )
         for (i in 1 until activeStyles.size) {
             style.merge(density, activeStyles[i])
         }
@@ -528,7 +545,6 @@ internal class ParagraphBuilder(
 
         val lineHeightStyle = style.lineHeightStyle ?: LineHeightStyle.Default
         pStyle.heightMode = lineHeightStyle.trim.toHeightMode()
-        // TODO: Support lineHeightStyle.alignment. Currently it's not exposed in skia
 
         pStyle.direction = textDirection.toSkDirection()
         textStyle.textIndent?.run {
@@ -563,6 +579,19 @@ private fun LineHeightStyle.Trim.toHeightMode(): HeightMode = when(this) {
     LineHeightStyle.Trim.LastLineBottom -> HeightMode.DISABLE_LAST_DESCENT
     LineHeightStyle.Trim.None -> HeightMode.ALL
     else -> HeightMode.DISABLE_ALL
+}
+
+// TODO: Properly support all values from lineHeightStyle.alignment
+private val TextStyle.isHalfLeading: Boolean get() {
+    val lineHeightStyle = lineHeightStyle ?: LineHeightStyle.Default
+    return when (lineHeightStyle.alignment) {
+        LineHeightStyle.Alignment.Center -> true
+        LineHeightStyle.Alignment.Proportional -> false
+
+        // Need to take topRatio float value instead of switch,
+        // but currently there is no such API in skia
+        else -> false
+    }
 }
 
 private fun TextStyle.resolveFontFamily(
