@@ -144,14 +144,16 @@ internal data class ComputedStyle(
     var textDecoration: TextDecoration?,
     var shadow: Shadow?,
     var drawStyle: DrawStyle?,
-    var blendMode: BlendMode
+    var blendMode: BlendMode,
+    var lineHeight: Float?,
 ) {
 
     constructor(
         density: Density,
         spanStyle: SpanStyle,
         brushSize: Size = Size.Unspecified,
-        blendMode: BlendMode = DrawScope.DefaultBlendMode
+        blendMode: BlendMode = DrawScope.DefaultBlendMode,
+        lineHeight: TextUnit,
     ) : this(
         textForegroundStyle = spanStyle.textForegroundStyle,
         brushSize = brushSize,
@@ -161,13 +163,9 @@ internal data class ComputedStyle(
         fontSynthesis = spanStyle.fontSynthesis,
         fontFamily = spanStyle.fontFamily,
         fontFeatureSettings = spanStyle.fontFeatureSettings,
-        letterSpacing = if (spanStyle.letterSpacing.isUnspecified) {
-            null
-        } else {
-            with(density) {
-                spanStyle.letterSpacing.toPx()
-            }
-        },
+        letterSpacing = if (spanStyle.letterSpacing.isSpecified) {
+            with(density) { spanStyle.letterSpacing.toPx() }
+        } else null,
         baselineShift = spanStyle.baselineShift,
         textGeometricTransform = spanStyle.textGeometricTransform,
         localeList = spanStyle.localeList,
@@ -175,7 +173,17 @@ internal data class ComputedStyle(
         textDecoration = spanStyle.textDecoration,
         shadow = spanStyle.shadow,
         drawStyle = spanStyle.drawStyle,
-        blendMode = blendMode
+        blendMode = blendMode,
+        lineHeight = if (lineHeight.isSpecified) {
+            with(density) {
+                when {
+                    lineHeight.isUnspecified -> spanStyle.fontSize.toPx()
+                    lineHeight.isEm -> spanStyle.fontSize.toPx() * lineHeight.value
+                    lineHeight.isSp -> lineHeight.toPx()
+                    else -> error("Unexpected size in ComputedStyle")
+                }
+            }
+        } else null,
     )
 
     private fun toTextPaint(): Paint? = Paint().let {
@@ -236,6 +244,9 @@ internal data class ComputedStyle(
         baselineShift?.let {
             val fontMetrics = res.fontMetrics
             res.baselineShift = it.multiplier * fontMetrics.ascent
+        }
+        lineHeight?.let {
+            res.height = it / fontSize
         }
 
         return res
@@ -310,7 +321,7 @@ internal class ParagraphBuilder(
         initialStyle = textStyle.toSpanStyle().copyWithDefaultFontSize(
             drawStyle = drawStyle
         )
-        defaultStyle = ComputedStyle(density, initialStyle, brushSize, blendMode)
+        defaultStyle = ComputedStyle(density, initialStyle, brushSize, blendMode, textStyle.lineHeight)
         ops = makeOps(
             spanStyles,
             placeholders
@@ -490,7 +501,7 @@ internal class ParagraphBuilder(
 
     private fun mergeStyles(activeStyles: List<SpanStyle>): ComputedStyle {
         // there is always at least one active style
-        val style = ComputedStyle(density, activeStyles[0], brushSize, blendMode)
+        val style = ComputedStyle(density, activeStyles[0], brushSize, blendMode, textStyle.lineHeight)
         for (i in 1 until activeStyles.size) {
             style.merge(density, activeStyles[i])
         }
@@ -515,25 +526,10 @@ internal class ParagraphBuilder(
             pStyle.alignment = it.toSkAlignment()
         }
 
-        if (style.lineHeight.isSpecified) {
-            val strutStyle = StrutStyle()
+        val lineHeightStyle = style.lineHeightStyle ?: LineHeightStyle.Default
+        pStyle.heightMode = lineHeightStyle.trim.toHeightMode()
+        // TODO: Support lineHeightStyle.alignment. Currently it's not exposed in skia
 
-            strutStyle.isEnabled = true
-            strutStyle.isHeightOverridden = true
-            val fontSize = with(density) {
-                style.fontSize.orDefaultFontSize().toPx()
-            }
-            val lineHeight = with(style.lineHeight) {
-                when {
-                    isSp -> with(density) { toPx() }
-                    isEm -> fontSize * value
-                    else -> error("Unexpected size in textStyleToParagraphStyle")
-                }
-            }
-            strutStyle.height = lineHeight / fontSize
-            strutStyle.fontSize = fontSize
-            pStyle.strutStyle = strutStyle
-        }
         pStyle.direction = textDirection.toSkDirection()
         textStyle.textIndent?.run {
             with(density) {
@@ -549,22 +545,9 @@ internal class ParagraphBuilder(
         }
     }
 
-    @OptIn(ExperimentalTextApi::class)
     internal val defaultFont by lazy {
-        val loadResult = textStyle.fontFamily?.let {
-            @Suppress("UNCHECKED_CAST")
-            fontFamilyResolver.resolve(
-                it,
-                textStyle.fontWeight ?: FontWeight.Normal,
-                textStyle.fontStyle ?: FontStyle.Normal,
-                textStyle.fontSynthesis ?: FontSynthesis.All
-            ).value as FontLoadResult
-        }
+        val loadResult = textStyle.resolveFontFamily(fontFamilyResolver)
         SkFont(loadResult?.typeface, defaultStyle.fontSize)
-    }
-
-    internal val defaultHeight by lazy {
-        defaultFont.metrics.height
     }
 }
 
@@ -574,7 +557,25 @@ private fun TextUnit.orDefaultFontSize() = when {
     else -> this
 }
 
-@OptIn(ExperimentalTextApi::class)
+private fun LineHeightStyle.Trim.toHeightMode(): HeightMode = when(this) {
+    LineHeightStyle.Trim.Both -> HeightMode.DISABLE_ALL
+    LineHeightStyle.Trim.FirstLineTop -> HeightMode.DISABLE_FIRST_ASCENT
+    LineHeightStyle.Trim.LastLineBottom -> HeightMode.DISABLE_LAST_DESCENT
+    LineHeightStyle.Trim.None -> HeightMode.ALL
+    else -> HeightMode.DISABLE_ALL
+}
+
+private fun TextStyle.resolveFontFamily(
+    fontFamilyResolver: FontFamily.Resolver
+) = fontFamily?.let {
+    fontFamilyResolver.resolve(
+        fontFamily = it,
+        fontWeight = fontWeight ?: FontWeight.Normal,
+        fontStyle = fontStyle ?: FontStyle.Normal,
+        fontSynthesis = fontSynthesis ?: FontSynthesis.All
+    ).value as FontLoadResult
+}
+
 private fun SpanStyle.copyWithDefaultFontSize(drawStyle: DrawStyle? = null): SpanStyle {
     val fontSize = this.fontSize.orDefaultFontSize()
     val letterSpacing = when {
