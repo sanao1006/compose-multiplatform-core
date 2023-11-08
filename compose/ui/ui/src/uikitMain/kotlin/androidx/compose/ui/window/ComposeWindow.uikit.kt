@@ -486,7 +486,7 @@ internal actual class ComposeWindow : UIViewController {
     override fun viewDidDisappear(animated: Boolean) {
         super.viewDidDisappear(animated)
 
-        dispose()
+//        dispose()
 
         dispatch_async(dispatch_get_main_queue()) {
             kotlin.native.internal.GC.collect()
