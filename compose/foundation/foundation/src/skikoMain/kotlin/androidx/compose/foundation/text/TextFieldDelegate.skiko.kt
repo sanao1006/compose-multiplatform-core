@@ -49,19 +49,19 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
     val currentValue = editProcessor.toTextFieldValue()
     val currentText = currentValue.text
 
-    val caretDesiredPosition = determineCursorDesiredPosition(
+    val cursorDesiredOffset = determineCursorDesiredOffset(
         offset,
         currentValue,
         textLayoutResult,
         currentText
     )
 
-    if (caretDesiredPosition == offset) {
+    if (cursorDesiredOffset == offset) {
         showContextMenu(textLayoutResult.value.getCursorRect(offset))
     }
 
     onValueChange(
-        editProcessor.toTextFieldValue().copy(selection = TextRange(caretDesiredPosition))
+        editProcessor.toTextFieldValue().copy(selection = TextRange(cursorDesiredOffset))
     )
 }
 
@@ -82,7 +82,7 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
  * @param currentText The current text in the TextField.
  * @return The desired cursor position after evaluating the given parameters.
  */
-internal fun determineCursorDesiredPosition(
+internal fun determineCursorDesiredOffset(
     offset: Int,
     currentValue: TextFieldValue,
     textLayoutResult: TextLayoutResultProxy,
@@ -167,13 +167,39 @@ private tailrec fun findNextWordBoundary(
 ): TextRange {
     val wordRange = textLayoutResult.value.getWordBoundary(caretOffset)
     val currentChar = currentText[caretOffset]
-    return if (!currentChar.isPunctuationOrWhitespace()) {
-        wordRange
-    } else if (caretOffset >= currentText.lastIndex) {
-        TextRange(currentText.lastIndex)
-    } else {
+    val lastIndex = currentText.lastIndex
+    return if (caretOffset > lastIndex) {
+        TextRange(lastIndex)
+    } else if (currentChar.isWhitespace()) {
         findNextWordBoundary(caretOffset + 1, currentText, textLayoutResult)
+    } else if (!currentChar.isPunctuation()) {
+        wordRange // not a whitespace or punctuation
+    } else {
+        getSymbolsOnlySubsequenceBoundaries(
+            caretOffset,
+            currentText
+        ) // may be null (example: aaa...)
+            ?: findNextWordBoundary(caretOffset + 1, currentText, textLayoutResult)
     }
+}
+
+private fun getSymbolsOnlySubsequenceBoundaries(caretOffset: Int, currentText: String): TextRange? {
+    var leadOffset = caretOffset
+    var trailOffset = caretOffset
+    val lastIndex = currentText.lastIndex
+    while (!currentText[leadOffset].isWhitespace() && leadOffset >= 0) {
+        if (!currentText[leadOffset].isPunctuation()) {
+            return null
+        }
+        leadOffset -= 1
+    }
+    while (!currentText[leadOffset].isWhitespace() && trailOffset <= lastIndex) {
+        if (!currentText[trailOffset].isPunctuation()) {
+            return null
+        }
+        trailOffset += 1
+    }
+    return TextRange(leadOffset, trailOffset)
 }
 
 private fun Char.isPunctuationOrWhitespace(): Boolean {
