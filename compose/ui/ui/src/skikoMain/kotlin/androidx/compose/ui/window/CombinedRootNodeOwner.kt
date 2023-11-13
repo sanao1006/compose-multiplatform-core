@@ -16,21 +16,20 @@
 
 package androidx.compose.ui.window
 
-import androidx.compose.ui.ComposeScene
+import androidx.compose.ui.ComposeSceneInputHandler
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.node.SnapshotInvalidationTracker
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.node.LayoutNode
-import androidx.compose.ui.node.Owner
 import androidx.compose.ui.platform.Platform
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.toIntRect
 import androidx.compose.ui.util.fastAny
@@ -39,46 +38,46 @@ import androidx.compose.ui.util.fastForEachReversed
 import kotlin.coroutines.CoroutineContext
 
 internal class CombinedRootNodeOwner(
-    scene: ComposeScene,
+    snapshotInvalidationTracker: SnapshotInvalidationTracker,
+    inputHandler: ComposeSceneInputHandler,
     platform: Platform,
-    initDensity: Density,
+    density: Density,
     coroutineContext: CoroutineContext,
-    initLayoutDirection: LayoutDirection,
+    layoutDirection: LayoutDirection,
     constraints: Constraints,
-    onPointerUpdate: () -> Unit,
     modifier: Modifier = Modifier,
-) : RootNodeOwner(
-    scene = scene,
-    platform = platform,
-    initDensity = initDensity,
-    coroutineContext = coroutineContext,
-    initLayoutDirection = initLayoutDirection,
-    constraints = constraints,
-    focusable = true,
-    onOutsidePointerEvent = null,
-    onPointerUpdate = onPointerUpdate,
-    modifier = modifier
-) {
+) : RootNodeOwner {
+    private var mainOwner = RootNodeOwnerImpl(
+        snapshotInvalidationTracker = snapshotInvalidationTracker,
+        inputHandler = inputHandler,
+        platform = platform,
+        density = density,
+        coroutineContext = coroutineContext,
+        layoutDirection = layoutDirection,
+        constraints = constraints,
+        modifier = modifier
+    )
+
     /**
-     * Contains attached registered [RootNodeOwner] in order of attachment.
+     * Contains all registered [RootNodeOwner] (main frame, popups, etc.) in order of registration.
+     * So that Popup opened from main owner will have bigger index.
      * This logic is used by accessibility.
      */
-    internal val attachedOwners = mutableListOf<RootNodeOwner>()
-
-    override var constraints = constraints
-        set(value) {
-            field = value
-            forEachAttachedOwner { it.constraints = value }
-            bounds = value.maxSize.toIntRect()
-        }
-
-    override val accessibilityControllers
-        get() = attachedOwners.asReversed()
-            .map { it.accessibilityController } + super.accessibilityControllers
+    private val owners = mutableListOf<RootNodeOwner>(mainOwner)
 
     private var focusedOwner: RootNodeOwner = this
     private var gestureOwner: RootNodeOwner? = null
     private var lastHoverOwner: RootNodeOwner? = null
+
+    override var constraints
+        get() = mainOwner.constraints
+        set(value) {
+            forEachOwner { it.constraints = value }
+            bounds = value.maxSize.toIntRect()
+        }
+
+    val accessibilityControllers
+        get() = owners.asReversed().map { it.accessibilityController }
 
     private val _focusOwner = createFocusOwner(platform.focusManager)
     override val focusOwner = object : FocusOwner by _focusOwner {
@@ -117,31 +116,27 @@ internal class CombinedRootNodeOwner(
         }
 
     // Cache to reduce allocations
-    private val listCopy = mutableListOf<RootNodeOwner>()
+    private val _ownersCopyCache = mutableListOf<RootNodeOwner>()
     private inline fun withOwnersCopy(
-        includeSelf: Boolean = false,
         block: (List<RootNodeOwner>) -> Unit
     ) {
         // In case of recursive calls, allocate new list
-        val owners = if (listCopy.isEmpty()) listCopy else mutableListOf()
-        if (includeSelf) {
-            owners.add(this)
-        }
-        owners.addAll(attachedOwners)
+        val copy = if (_ownersCopyCache.isEmpty()) _ownersCopyCache else mutableListOf()
+        copy.addAll(owners)
         try {
-            block(owners)
+            block(copy)
         } finally {
-            owners.clear()
+            copy.clear()
         }
     }
 
-    private inline fun forEachAttachedOwner(action: (RootNodeOwner) -> Unit) =
+    private inline fun forEachOwner(action: (RootNodeOwner) -> Unit) =
         withOwnersCopy {
             it.fastForEach(action)
         }
 
     private inline fun forEachOwnerReversed(action: (RootNodeOwner) -> Unit) =
-        withOwnersCopy(includeSelf = true) {
+        withOwnersCopy {
             it.fastForEachReversed(action)
         }
 
@@ -193,11 +188,7 @@ internal class CombinedRootNodeOwner(
     }
 
     override fun sendKeyEvent(keyEvent: KeyEvent): Boolean {
-        return if (focusedOwner == this) {
-            super.sendKeyEvent(keyEvent)
-        } else {
-            focusedOwner.sendKeyEvent(keyEvent)
-        }
+        return focusedOwner.sendKeyEvent(keyEvent)
     }
 
     private fun forwardPointerInput(owner: RootNodeOwner?, event: PointerInputEvent) {
@@ -321,26 +312,11 @@ internal class CombinedRootNodeOwner(
             forwardPointerInput(owner, event)
         }
     }
-
-    override fun measureAndLayout(sendPointerUpdate: Boolean) {
-        super.measureAndLayout(sendPointerUpdate)
-        forEachAttachedOwner { it.measureAndLayout(sendPointerUpdate) }
-    }
-
-    override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
-        super.measureAndLayout(layoutNode, constraints)
-        forEachAttachedOwner { it.measureAndLayout(layoutNode, constraints) }
-    }
-
-    override fun draw(canvas: Canvas) {
-        super.draw(canvas)
-        forEachAttachedOwner { it.draw(canvas) }
-    }
-
-    override fun clearInvalidObservations() {
-        super.clearInvalidObservations()
-        forEachAttachedOwner { it.clearInvalidObservations() }
-    }
 }
 
 private val PointerInputEvent.isGestureInProgress get() = pointers.fastAny { it.down }
+
+private fun RootNodeOwner.isInBounds(point: Offset): Boolean {
+    val intOffset = IntOffset(point.x.toInt(), point.y.toInt())
+    return bounds.contains(intOffset)
+}

@@ -59,20 +59,11 @@ internal fun RootLayout(
     val layoutDirection = LocalLayoutDirection.current
     val parentComposition = rememberCompositionContext()
     val (owner, composition) = remember {
-        val owner = RootNodeOwner(
-            scene = scene,
-            platform = scene.platform,
+        val owner = scene.createAttachedLayer(
             coroutineContext = parentComposition.effectCoroutineContext,
-            initDensity = density,
-            initLayoutDirection = layoutDirection,
-            constraints = scene.constraints,
-            focusable = focusable,
-            onOutsidePointerEvent = onOutsidePointerEvent,
-            onPointerUpdate = scene::onPointerUpdate,
             modifier = modifier
         )
-        owner.initialize()
-        scene.attach(owner)
+        scene.attach(owner, focusable, onOutsidePointerEvent)
         owner to owner.setContent(parent = parentComposition) {
             content(owner)
         }

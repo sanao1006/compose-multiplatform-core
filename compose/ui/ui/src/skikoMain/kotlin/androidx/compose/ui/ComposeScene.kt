@@ -17,14 +17,12 @@ package androidx.compose.ui
 
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyInputElement
-import androidx.compose.ui.input.key.NativeKeyEvent
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.RootForTest
@@ -35,13 +33,13 @@ import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.CombinedRootNodeOwner
 import androidx.compose.ui.window.RootNodeOwner
-import androidx.compose.ui.window.maxSize
 import kotlin.coroutines.CoroutineContext
 import kotlin.jvm.Volatile
 import kotlinx.coroutines.*
-import org.jetbrains.skia.Canvas
-import org.jetbrains.skiko.SkiaLayer
-import org.jetbrains.skiko.currentNanoTime
+import org.jetbrains.skia.Canvas as SkCanvas
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.node.SnapshotInvalidationTracker
+import androidx.compose.ui.window.RootNodeOwnerImpl
 
 internal val LocalComposeScene = staticCompositionLocalOf<ComposeScene?> { null }
 
@@ -56,8 +54,7 @@ internal fun CompositionLocal<ComposeScene?>.requireCurrent(): ComposeScene {
 /**
  * A virtual container that encapsulates Compose UI content. UI content can be constructed via
  * [setContent] method and with any Composable that manipulates [LayoutNode] tree.
- *
- * To draw content on [Canvas], you can use [render] method.
+ * To draw content on [SkCanvas], you can use [render] method.
  *
  * To specify available size for the content, you should use [constraints].
  *
@@ -74,7 +71,7 @@ class ComposeScene internal constructor(
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
     private val invalidate: () -> Unit = {}
-) {
+) : BaseComposeScene() {
     /**
      * Constructs [ComposeScene]
      *
@@ -174,10 +171,9 @@ class ComposeScene internal constructor(
         invalidate,
     )
 
-    private var isInvalidationDisabled = false
+    private val snapshotInvalidationTracker = SnapshotInvalidationTracker(::invalidateIfNeeded)
 
-    @Volatile
-    private var hasPendingDraws = true
+    private var isInvalidationDisabled = false
     private inline fun <T> postponeInvalidation(crossinline block: () -> T): T {
         check(!isClosed) { "ComposeScene is closed" }
         isInvalidationDisabled = true
@@ -185,7 +181,7 @@ class ComposeScene internal constructor(
             // Try to get see the up-to-date state before running block
             // Note that this doesn't guarantee it, if sendApplyNotifications is called concurrently
             // in a different thread than this code.
-            sendAndPerformSnapshotChanges()
+            snapshotInvalidationTracker.sendAndPerformSnapshotChanges()
             block()
         } finally {
             isInvalidationDisabled = false
@@ -194,34 +190,15 @@ class ComposeScene internal constructor(
         return result
     }
 
+    @Volatile
+    private var hasPendingDraws = true
     private fun invalidateIfNeeded() {
-        hasPendingDraws = frameClock.hasAwaiters || needLayout || needDraw ||
-            snapshotChanges.hasCommands || syntheticEventSender.needUpdatePointerPosition
+        hasPendingDraws = frameClock.hasAwaiters ||
+            snapshotInvalidationTracker.hasInvalidations ||
+            inputHandler.hasInvalidations
         if (hasPendingDraws && !isInvalidationDisabled && !isClosed) {
             invalidate()
         }
-    }
-
-    private var needLayout = true
-    private var needDraw = true
-
-    private fun requestLayout() {
-        needLayout = true
-        invalidateIfNeeded()
-    }
-
-    private fun requestDraw() {
-        needDraw = true
-        invalidateIfNeeded()
-    }
-
-    private fun requestUpdatePointer() {
-        syntheticEventSender.needUpdatePointerPosition = true
-        invalidateIfNeeded()
-    }
-
-    internal fun onPointerUpdate() {
-        requestUpdatePointer()
     }
 
     @Deprecated(
@@ -240,7 +217,6 @@ class ComposeScene internal constructor(
     val semanticsOwner: SemanticsOwner
         get() = requireNotNull(mainOwner).semanticsOwner
 
-    private val defaultPointerStateTracker = DefaultPointerStateTracker()
 
     private val job = Job()
     private val coroutineScope = CoroutineScope(coroutineContext + job)
@@ -251,7 +227,10 @@ class ComposeScene internal constructor(
     private val recomposeDispatcher = FlushCoroutineDispatcher(coroutineScope)
     private val frameClock = BroadcastFrameClock(onNewAwaiters = ::invalidateIfNeeded)
     private val recomposer = Recomposer(coroutineContext + job + effectDispatcher)
-    private val syntheticEventSender = SyntheticEventSender(::processPointerInput)
+    private val inputHandler = ComposeSceneInputHandler(
+        processPointerInputEvent = { mainOwner?.onPointerInput(it) },
+        processKeyEvent = { mainOwner?.onKeyEvent(it) == true }
+    )
 
     internal var mainOwner: RootNodeOwner? = null
     private var composition: Composition? = null
@@ -278,11 +257,6 @@ class ComposeScene internal constructor(
         }
 
     private var isClosed = false
-
-    /**
-     * Provides mapping pointer id -> current pointer position inside [ComposeScene]
-     */
-    internal val pointerPositions = mutableMapOf<PointerId, Offset>()
 
     init {
         GlobalSnapshotManager.ensureStarted()
@@ -312,32 +286,34 @@ class ComposeScene internal constructor(
         isClosed = true
     }
 
-    private val snapshotChanges = CommandList(::invalidateIfNeeded)
-
     /**
      * Returns true if there are pending recompositions, renders or dispatched tasks.
      * Can be called from any thread.
      */
-    fun hasInvalidations() = hasPendingDraws ||
+    override fun hasInvalidations() = hasPendingDraws ||
         recomposer.hasPendingWork ||
         effectDispatcher.hasTasks() ||
         recomposeDispatcher.hasTasks()
 
 
-    internal fun attach(owner: RootNodeOwner) {
+    internal fun attach(
+        owner: RootNodeOwner,
+        focusable: Boolean,
+        onOutsidePointerEvent: ((PointerInputEvent) -> Unit)? = null,
+    ) {
         (mainOwner as CombinedRootNodeOwner?)?.attach(owner)
         if (isFocused) {
             owner.focusOwner.takeFocus()
         } else {
             owner.focusOwner.releaseFocus()
         }
-        requestUpdatePointer()
+        inputHandler.onPointerUpdate()
         invalidateIfNeeded()
     }
 
     internal fun detach(owner: RootNodeOwner) {
         (mainOwner as CombinedRootNodeOwner?)?.detach(owner)
-        requestUpdatePointer()
+        inputHandler.onPointerUpdate()
         invalidateIfNeeded()
     }
 
@@ -357,7 +333,7 @@ class ComposeScene internal constructor(
      *
      * @param content Content of the [ComposeScene]
      */
-    fun setContent(
+    override fun setContent(
         content: @Composable () -> Unit
     ) = setContent(
         parentComposition = null,
@@ -384,7 +360,7 @@ class ComposeScene internal constructor(
         content: @Composable () -> Unit
     ) {
         check(!isClosed) { "ComposeScene is closed" }
-        syntheticEventSender.reset()
+        inputHandler.onChangeContent()
         composition?.dispose()
         mainOwner?.dispose()
 
@@ -411,26 +387,42 @@ class ComposeScene internal constructor(
 
     private fun createMainLayer(modifier: Modifier): RootNodeOwner {
         val owner = CombinedRootNodeOwner(
-            scene = this,
+            snapshotInvalidationTracker = snapshotInvalidationTracker,
+            inputHandler = inputHandler,
             platform = platform,
-            initDensity = density,
-            initLayoutDirection = layoutDirection,
+            density = density,
+            layoutDirection = layoutDirection,
             coroutineContext = recomposer.effectCoroutineContext,
             constraints = constraints,
-            onPointerUpdate = ::onPointerUpdate,
             modifier = modifier
         )
         owner.initialize()
-        owner.requestLayout = ::requestLayout
-        owner.requestDraw = ::requestDraw
-        owner.dispatchSnapshotChanges = snapshotChanges::add
         if (isFocused) {
             owner.focusOwner.takeFocus()
         } else {
             owner.focusOwner.releaseFocus()
         }
-        requestUpdatePointer()
+        inputHandler.onPointerUpdate()
         invalidateIfNeeded()
+
+        return owner
+    }
+
+    internal fun createAttachedLayer(
+        coroutineContext: CoroutineContext,
+        modifier: Modifier
+    ): RootNodeOwner {
+        val owner = RootNodeOwnerImpl(
+            snapshotInvalidationTracker = snapshotInvalidationTracker,
+            inputHandler = inputHandler,
+            platform = platform,
+            density = density,
+            layoutDirection = layoutDirection,
+            coroutineContext = coroutineContext,
+            constraints = constraints,
+            modifier = modifier
+        )
+        owner.initialize()
 
         return owner
     }
@@ -438,7 +430,7 @@ class ComposeScene internal constructor(
     /**
      * Constraints used to measure and layout content.
      */
-    var constraints: Constraints = Constraints()
+    override var constraints: Constraints = Constraints()
         set(value) {
             field = value
             mainOwner?.constraints = constraints
@@ -447,21 +439,13 @@ class ComposeScene internal constructor(
     /**
      * Returns the current content size
      */
-    val contentSize: IntSize
+    override val contentSize: IntSize
         get() {
             check(!isClosed) { "ComposeScene is closed" }
             val mainOwner = mainOwner ?: return IntSize.Zero
-            mainOwner.measureAndLayout()
+            measureAndLayout()
             return mainOwner.contentSize
         }
-
-    /**
-     * Sends any pending apply notifications and performs the changes they cause.
-     */
-    private fun sendAndPerformSnapshotChanges() {
-        Snapshot.sendApplyNotifications()
-        snapshotChanges.perform()
-    }
 
     internal fun hitTestInteropView(position: Offset): Boolean =
         mainOwner?.hitTestInteropView(position) ?: false
@@ -470,151 +454,76 @@ class ComposeScene internal constructor(
      * Render the current content on [canvas]. Passed [nanoTime] will be used to drive all
      * animations in the content (or any other code, which uses [withFrameNanos]
      */
-    fun render(canvas: Canvas, nanoTime: Long): Unit = postponeInvalidation {
+    fun render(canvas: SkCanvas, nanoTime: Long): Unit = postponeInvalidation {
         recomposeDispatcher.flush()
         frameClock.sendFrame(nanoTime) // Recomposition
-        sendAndPerformSnapshotChanges() // Apply changes from recomposition phase to layout phase
-        needLayout = false
-        mainOwner?.measureAndLayout()
-        syntheticEventSender.updatePointerPosition()
-        sendAndPerformSnapshotChanges()  // Apply changes from layout phase to draw phase
-        needDraw = false
-        mainOwner?.draw(canvas.asComposeCanvas())
-        mainOwner?.clearInvalidObservations()
+
+        measureAndLayout()
+        draw(canvas.asComposeCanvas())
     }
 
-    // TODO(demin): return Boolean (when it is consumed)
-    /**
-     * Send pointer event to the content.
-     *
-     * @param eventType Indicates the primary reason that the event was sent.
-     * @param position The [Offset] of the current pointer event, relative to the content.
-     * @param scrollDelta scroll delta for the PointerEventType.Scroll event
-     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`) time
-     * is platform-dependent.
-     * @param type The device type that produced the event, such as [mouse][PointerType.Mouse],
-     * or [touch][PointerType.Touch].
-     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after the event.
-     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control,
-     * and Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
-     * @param nativeEvent The original native event.
-     * @param button Represents the index of a button which state changed in this event. It's null
-     * when there was no change of the buttons state or when button is not applicable (e.g. touch event).
-     */
-    @OptIn(ExperimentalComposeUiApi::class)
-    fun sendPointerEvent(
+    override fun sendPointerEvent(
         eventType: PointerEventType,
         position: Offset,
-        scrollDelta: Offset = Offset(0f, 0f),
-        timeMillis: Long = (currentNanoTime() / 1E6).toLong(),
-        type: PointerType = PointerType.Mouse,
-        buttons: PointerButtons? = null,
-        keyboardModifiers: PointerKeyboardModifiers? = null,
-        nativeEvent: Any? = null,
-        button: PointerButton? = null
-    ) {
-        defaultPointerStateTracker.onPointerEvent(button, eventType)
-
-        val actualButtons = buttons ?: defaultPointerStateTracker.buttons
-        val actualKeyboardModifiers =
-            keyboardModifiers ?: defaultPointerStateTracker.keyboardModifiers
-
-        sendPointerEvent(
-            eventType,
-            listOf(Pointer(PointerId(0), position, actualButtons.areAnyPressed, type)),
-            actualButtons,
-            actualKeyboardModifiers,
-            scrollDelta,
-            timeMillis,
-            nativeEvent,
-            button
+        scrollDelta: Offset,
+        timeMillis: Long,
+        type: PointerType,
+        buttons: PointerButtons?,
+        keyboardModifiers: PointerKeyboardModifiers?,
+        nativeEvent: Any?,
+        button: PointerButton?
+    ) = postponeInvalidation {
+        measureAndLayout()
+        inputHandler.onPointerEvent(
+            eventType = eventType,
+            position = position,
+            scrollDelta = scrollDelta,
+            timeMillis = timeMillis,
+            type = type,
+            buttons = buttons,
+            keyboardModifiers = keyboardModifiers,
+            nativeEvent = nativeEvent,
+            button = button
         )
     }
 
-    // TODO(demin): return Boolean (when it is consumed)
-    // TODO(demin) verify that pressure is the same on Android and iOS
-    /**
-     * Send pointer event to the content. The more detailed version of [sendPointerEvent] that can accept
-     * multiple pointers.
-     *
-     * @param eventType Indicates the primary reason that the event was sent.
-     * @param pointers The current pointers with position relative to the content.
-     * There can be multiple pointers, for example, if we use Touch and touch screen with multiple fingers.
-     * Contains only the state of the active pointers.
-     * Touch that is released still considered as active on PointerEventType.Release event (but with pressed=false). It
-     * is no longer active after that, and shouldn't be passed to the scene.
-     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after the event.
-     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control,
-     * and Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
-     * @param scrollDelta scroll delta for the PointerEventType.Scroll event
-     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`) time
-     * is platform-dependent.
-     * @param nativeEvent The original native event.
-     * @param button Represents the index of a button which state changed in this event. It's null
-     * when there was no change of the buttons state or when button is not applicable (e.g. touch event).
-     */
     @ExperimentalComposeUiApi
-    fun sendPointerEvent(
+    override fun sendPointerEvent(
         eventType: PointerEventType,
         pointers: List<Pointer>,
-        buttons: PointerButtons = PointerButtons(),
-        keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
-        scrollDelta: Offset = Offset(0f, 0f),
-        timeMillis: Long = (currentNanoTime() / 1E6).toLong(),
-        nativeEvent: Any? = null,
-        button: PointerButton? = null,
-    ): Unit = postponeInvalidation {
-        val event = pointerInputEvent(
-            eventType,
-            pointers,
-            timeMillis,
-            nativeEvent,
-            scrollDelta,
-            buttons,
-            keyboardModifiers,
-            button,
+        buttons: PointerButtons,
+        keyboardModifiers: PointerKeyboardModifiers,
+        scrollDelta: Offset,
+        timeMillis: Long,
+        nativeEvent: Any?,
+        button: PointerButton?,
+    ) = postponeInvalidation {
+        measureAndLayout()
+        inputHandler.onPointerEvent(
+            eventType = eventType,
+            pointers = pointers,
+            buttons = buttons,
+            keyboardModifiers = keyboardModifiers,
+            scrollDelta = scrollDelta,
+            timeMillis = timeMillis,
+            nativeEvent = nativeEvent,
+            button = button
         )
-        needLayout = false
+    }
+
+    override fun sendKeyEvent(keyEvent: KeyEvent): Boolean = postponeInvalidation {
+        inputHandler.onKeyEvent(keyEvent)
+    }
+
+    private fun measureAndLayout() {
+        snapshotInvalidationTracker.onLayout()
         mainOwner?.measureAndLayout()
-        syntheticEventSender.updatePointerPosition()
-        syntheticEventSender.send(event)
-        updatePointerPositions(event)
+        inputHandler.onLayout()
     }
 
-    private fun updatePointerPositions(event: PointerInputEvent) {
-        // update positions for pointers that are down + mouse (if it is not Exit event)
-        for (pointer in event.pointers) {
-            if ((pointer.type == PointerType.Mouse && event.eventType != PointerEventType.Exit) ||
-                pointer.down
-            ) {
-                pointerPositions[pointer.id] = pointer.position
-            }
-        }
-        // touches/styluses positions should be removed from [pointerPositions] if they are not down anymore
-        // also, mouse exited ComposeScene should be removed
-        val iterator = pointerPositions.iterator()
-        while (iterator.hasNext()) {
-            val pointerId = iterator.next().key
-            val pointer = event.pointers.find { it.id == pointerId } ?: continue
-            if ((pointer.type != PointerType.Mouse && !pointer.down) ||
-                (pointer.type == PointerType.Mouse && event.eventType == PointerEventType.Exit)
-            ) {
-                iterator.remove()
-            }
-        }
-    }
-
-    private fun processPointerInput(event: PointerInputEvent) {
-        mainOwner?.processPointerInput(event)
-    }
-
-    /**
-     * Send [KeyEvent] to the content.
-     * @return true if the event was consumed by the content
-     */
-    fun sendKeyEvent(keyEvent: ComposeKeyEvent): Boolean = postponeInvalidation {
-        defaultPointerStateTracker.onKeyEvent(keyEvent)
-        mainOwner?.sendKeyEvent(keyEvent) == true
+    private fun draw(canvas: Canvas) {
+        snapshotInvalidationTracker.onDraw()
+        mainOwner?.draw(canvas)
     }
 
     private var isFocused = true
@@ -722,61 +631,3 @@ class ComposeScene internal constructor(
         }
     }
 }
-
-private class DefaultPointerStateTracker {
-    fun onPointerEvent(button: PointerButton?, eventType: PointerEventType) {
-        when (eventType) {
-            PointerEventType.Press -> buttons = buttons.copyFor(button ?: PointerButton.Primary, pressed = true)
-            PointerEventType.Release -> buttons = buttons.copyFor(button ?: PointerButton.Primary, pressed = false)
-        }
-    }
-
-    fun onKeyEvent(keyEvent: KeyEvent) {
-        keyboardModifiers = keyEvent.nativeKeyEvent.toPointerKeyboardModifiers()
-    }
-
-    var buttons = PointerButtons()
-        private set
-
-    var keyboardModifiers = PointerKeyboardModifiers()
-        private set
-}
-
-@OptIn(ExperimentalComposeUiApi::class)
-private fun pointerInputEvent(
-    eventType: PointerEventType,
-    pointers: List<ComposeScene.Pointer>,
-    timeMillis: Long,
-    nativeEvent: Any?,
-    scrollDelta: Offset,
-    buttons: PointerButtons,
-    keyboardModifiers: PointerKeyboardModifiers,
-    changedButton: PointerButton?
-): PointerInputEvent {
-    return PointerInputEvent(
-        eventType,
-        timeMillis,
-        pointers.map {
-            PointerInputEventData(
-                it.id,
-                timeMillis,
-                it.position,
-                it.position,
-                it.pressed,
-                it.pressure,
-                it.type,
-                issuesEnterExit = it.type == PointerType.Mouse,
-                historical = it.historical,
-                scrollDelta = scrollDelta
-            )
-        },
-        buttons,
-        keyboardModifiers,
-        nativeEvent,
-        changedButton
-    )
-}
-
-internal expect fun createSkiaLayer(): SkiaLayer
-
-internal expect fun NativeKeyEvent.toPointerKeyboardModifiers(): PointerKeyboardModifiers

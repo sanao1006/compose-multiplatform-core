@@ -17,9 +17,17 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.ComposeScene
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.unit.IntSize
+import org.jetbrains.skiko.currentNanoTime
 
 /**
  * The marker interface to be implemented by the desktop root backing the composition.
@@ -33,17 +41,44 @@ interface SkiaRootForTest : RootForTest {
     val containerSize: IntSize
 
     /**
-     * The [ComposeScene] which contains this root.
-     * Required only for dispatching input events.
-     *
-     * TODO: Extract separate interface only for pointer input.
-     */
-    val scene: ComposeScene get() = throw UnsupportedOperationException("SkiaRootForTest.scene is not implemented")
-
-    /**
      * Whether the Owner has pending layout work.
      */
     val hasPendingMeasureOrLayout: Boolean
+
+    /**
+     * Send pointer event to the content.
+     *
+     * @see ComposeScene.sendPointerEvent
+     */
+    fun sendPointerEvent(
+        eventType: PointerEventType,
+        position: Offset,
+        scrollDelta: Offset = Offset(0f, 0f),
+        timeMillis: Long = (currentNanoTime() / 1E6).toLong(),
+        type: PointerType = PointerType.Mouse,
+        buttons: PointerButtons? = null,
+        keyboardModifiers: PointerKeyboardModifiers? = null,
+        nativeEvent: Any? = null,
+        button: PointerButton? = null
+    )
+
+    /**
+     * Send pointer event to the content. The more detailed version of [sendPointerEvent] that can accept
+     * multiple pointers.
+     *
+     * @see ComposeScene.sendPointerEvent
+     */
+    @ExperimentalComposeUiApi
+    fun sendPointerEvent(
+        eventType: PointerEventType,
+        pointers: List<ComposeScene.Pointer>,
+        buttons: PointerButtons = PointerButtons(),
+        keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
+        scrollDelta: Offset = Offset(0f, 0f),
+        timeMillis: Long = (currentNanoTime() / 1E6).toLong(),
+        nativeEvent: Any? = null,
+        button: PointerButton? = null,
+    )
 
     companion object {
         /**
