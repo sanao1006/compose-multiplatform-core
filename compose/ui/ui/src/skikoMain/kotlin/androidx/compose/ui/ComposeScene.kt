@@ -221,15 +221,8 @@ class ComposeScene internal constructor(
     internal val lastKnownCursorPosition: Offset?
         get() = inputHandler.lastKnownCursorPosition
 
-    private val job = Job()
-    private val coroutineScope = CoroutineScope(coroutineContext + job)
-
-    // We use FlushCoroutineDispatcher for effectDispatcher not because we need `flush` for
-    // LaunchEffect tasks, but because we need to know if it is idle (hasn't scheduled tasks)
-    private val effectDispatcher = FlushCoroutineDispatcher(coroutineScope)
-    private val recomposeDispatcher = FlushCoroutineDispatcher(coroutineScope)
     private val frameClock = BroadcastFrameClock(onNewAwaiters = ::invalidateIfNeeded)
-    private val recomposer = Recomposer(coroutineContext + job + effectDispatcher)
+    private val recomposer = ComposeSceneRecomposer(coroutineContext, frameClock)
     private val inputHandler = ComposeSceneInputHandler(
         processPointerInputEvent = { mainOwner?.onPointerInput(it) },
         processKeyEvent = { mainOwner?.onKeyEvent(it) == true }
@@ -263,12 +256,6 @@ class ComposeScene internal constructor(
 
     init {
         GlobalSnapshotManager.ensureStarted()
-        coroutineScope.launch(
-            recomposeDispatcher + frameClock,
-            start = CoroutineStart.UNDISPATCHED
-        ) {
-            recomposer.runRecomposeAndApplyChanges()
-        }
     }
 
     /**
@@ -285,7 +272,6 @@ class ComposeScene internal constructor(
         composition?.dispose()
         mainOwner?.dispose()
         recomposer.cancel()
-        job.cancel()
         isClosed = true
     }
 
@@ -293,10 +279,7 @@ class ComposeScene internal constructor(
      * Returns true if there are pending recompositions, renders or dispatched tasks.
      * Can be called from any thread.
      */
-    override fun hasInvalidations() = hasPendingDraws ||
-        recomposer.hasPendingWork ||
-        effectDispatcher.hasTasks() ||
-        recomposeDispatcher.hasTasks()
+    override fun hasInvalidations() = hasPendingDraws || recomposer.hasPendingWork
 
 
     internal fun attach(
@@ -375,7 +358,7 @@ class ComposeScene internal constructor(
 
         // setContent might spawn more owners, so this.mainOwner should be set before that.
         composition = mainOwner.setContent(
-            parentComposition ?: recomposer,
+            parentComposition ?: recomposer.compositionContext,
             { compositionLocalContext }
         ) {
             CompositionLocalProvider(
@@ -385,7 +368,7 @@ class ComposeScene internal constructor(
         }
 
         // to perform all pending work synchronously
-        recomposeDispatcher.flush()
+        recomposer.flush()
     }
 
     private fun createMainLayer(modifier: Modifier): RootNodeOwner {
@@ -458,7 +441,7 @@ class ComposeScene internal constructor(
      * animations in the content (or any other code, which uses [withFrameNanos]
      */
     fun render(canvas: SkCanvas, nanoTime: Long): Unit = postponeInvalidation {
-        recomposeDispatcher.flush()
+        recomposer.flush()
         frameClock.sendFrame(nanoTime) // Recomposition
 
         measureAndLayout()
