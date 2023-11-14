@@ -21,15 +21,18 @@ package androidx.compose.ui.awt
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalContext
-import androidx.compose.ui.ComposeScene
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.semantics.SemanticsOwner
-import androidx.compose.ui.toPointerKeyboardModifiers
+import androidx.compose.ui.ComposeScene
+import androidx.compose.ui.scene.ComposeSceneContext
+import androidx.compose.ui.scene.EmptyComposeSceneContext
+import androidx.compose.ui.scene.toPointerKeyboardModifiers
+import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
@@ -148,13 +151,19 @@ internal abstract class ComposeBridge(
         }
     }
 
-    protected val platform: DesktopPlatform = DesktopPlatform()
+    protected val windowInfo = WindowInfoImpl()
+    private val platformInput = PlatformInput(platformComponent)
+    protected val platformContext = DesktopPlatformContext()
 
+    @OptIn(InternalComposeUiApi::class)
     internal val scene = ComposeScene(
-        MainUIDispatcher + coroutineExceptionHandler,
-        platform,
-        Density(1f),
-        layoutDirection,
+        coroutineContext = MainUIDispatcher + coroutineExceptionHandler,
+        composeSceneContext = object : ComposeSceneContext by EmptyComposeSceneContext {
+            override val platformContext: PlatformContext
+                get() = this@ComposeBridge.platformContext
+        },
+        density = Density(1f),
+        layoutDirection = layoutDirection,
         invalidate = {
             onComposeInvalidation()
         },
@@ -166,9 +175,7 @@ internal abstract class ComposeBridge(
 
     protected val skikoView = object : SkikoView {
         override val input: SkikoInput
-            get() = object : SkikoInput {
-
-            }
+            get() = SkikoInput.Empty
 
         override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
             catchExceptions {
@@ -211,7 +218,7 @@ internal abstract class ComposeBridge(
             override fun inputMethodTextChanged(event: InputMethodEvent) {
                 if (isDisposed) return
                 catchExceptions {
-                    platform.textInputService.inputMethodTextChanged(event)
+                    platformInput.inputMethodTextChanged(event)
                 }
             }
         })
@@ -275,7 +282,7 @@ internal abstract class ComposeBridge(
 
     private fun onKeyEvent(event: KeyEvent) = catchExceptions {
         if (isDisposed) return@catchExceptions
-        platform.textInputService.onKeyEvent(event)
+        platformInput.onKeyEvent(event)
         setCurrentKeyboardModifiers(event.toPointerKeyboardModifiers())
         if (scene.sendKeyEvent(ComposeKeyEvent(event))) {
             event.consume()
@@ -301,8 +308,9 @@ internal abstract class ComposeBridge(
         _initContent = {
             catchExceptions {
                 scene.setContent(
-                    onPreviewKeyEvent = onPreviewKeyEvent,
-                    onKeyEvent = onKeyEvent,
+                    // TODO
+//                    onPreviewKeyEvent = onPreviewKeyEvent,
+//                    onKeyEvent = onKeyEvent,
                     content = content
                 )
             }
@@ -320,7 +328,7 @@ internal abstract class ComposeBridge(
     }
 
     private fun setCurrentKeyboardModifiers(modifiers: PointerKeyboardModifiers) {
-        platform.windowInfo.keyboardModifiers = modifiers
+        windowInfo.keyboardModifiers = modifiers
     }
 
     protected fun updateSceneSize() {
@@ -329,7 +337,7 @@ internal abstract class ComposeBridge(
             width = (component.width * scale).toInt(),
             height = (component.height * scale).toInt()
         )
-        platform.windowInfo.containerSize = size
+        windowInfo.containerSize = size
         scene.constraints = Constraints(
             maxWidth = size.width,
             maxHeight = size.height
@@ -351,25 +359,36 @@ internal abstract class ComposeBridge(
     }
 
     private fun refreshWindowFocus() {
-        platform.windowInfo.isWindowFocused = window?.isFocused ?: false
+        windowInfo.isWindowFocused = window?.isFocused ?: false
         keyboardModifiersRequireUpdate = true
     }
 
-    protected inner class DesktopPlatform : Platform by Platform.Empty {
+    @OptIn(InternalComposeUiApi::class)
+    private inner class DesktopInputContext : PlatformContext.InputContext {
+        override val viewConfiguration = object : ViewConfiguration {
+            override val longPressTimeoutMillis: Long = 500
+            override val doubleTapTimeoutMillis: Long = 300
+            override val doubleTapMinTimeMillis: Long = 40
+            override val touchSlop: Float get() = with(platformComponent.density) { 18.dp.toPx() }
+        }
+        override val inputModeManager = DefaultInputModeManager()
+        override val textInputService: PlatformTextInputService =
+            PlatformInput(platformComponent)
+        override val textToolbar: TextToolbar get() = EmptyTextToolbar
+
         override fun setPointerIcon(pointerIcon: PointerIcon) {
             component.cursor =
                 (pointerIcon as? AwtCursor)?.cursor ?: Cursor(Cursor.DEFAULT_CURSOR)
         }
 
-        override fun accessibilityController(owner: SemanticsOwner) =
-            AccessibilityControllerImpl(owner, platformComponent, onFocusReceived = {
-                requestNativeFocusOnAccessible(it)
-            })
+    }
 
-        override val windowInfo = WindowInfoImpl()
-
-        override val textInputService = PlatformInput(platformComponent)
-
+    @OptIn(InternalComposeUiApi::class)
+    protected inner class DesktopPlatformContext : PlatformContext {
+        override val windowInfo: WindowInfo
+            get() = this@ComposeBridge.windowInfo
+        override val inputContext: PlatformContext.InputContext =
+            DesktopInputContext()
         override val focusManager = object : FocusManager {
             override fun clearFocus(force: Boolean) {
                 val root = component.rootPane
@@ -402,16 +421,14 @@ internal abstract class ComposeBridge(
                 }
         }
 
-        override fun requestFocusForOwner(): Boolean {
+        override fun requestFocus(): Boolean {
             return component.hasFocus() || component.requestFocusInWindow()
         }
 
-        override val viewConfiguration = object : ViewConfiguration {
-            override val longPressTimeoutMillis: Long = 500
-            override val doubleTapTimeoutMillis: Long = 300
-            override val doubleTapMinTimeMillis: Long = 40
-            override val touchSlop: Float get() = with(platformComponent.density) { 18.dp.toPx() }
-        }
+        override val rootForTestListener: PlatformContext.RootForTestListener?
+            get() = null
+        override val accessibilityListener: PlatformContext.AccessibilityListener?
+            get() = null
     }
 
     private class InvisibleComponent : Component() {

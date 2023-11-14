@@ -134,7 +134,7 @@ internal object EmptyPlatformTextInputService : PlatformTextInputService {
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) = Unit
 }
 
-private object EmptyTextToolbar : TextToolbar {
+internal object EmptyTextToolbar : TextToolbar {
     override fun hide() = Unit
     override val status: TextToolbarStatus = TextToolbarStatus.Hidden
     override fun showMenu(

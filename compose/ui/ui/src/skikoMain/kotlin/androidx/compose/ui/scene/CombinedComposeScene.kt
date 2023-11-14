@@ -19,9 +19,15 @@ package androidx.compose.ui.scene
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEvent
@@ -149,6 +155,9 @@ private class CombinedComposeSceneImpl(
     override fun close() {
         super.close()
         mainOwner.dispose()
+        attachedLayers.fastForEach {
+            it.dispose()
+        }
     }
 
     override fun calculateContentSize(): IntSize {
@@ -325,8 +334,7 @@ private class CombinedComposeSceneImpl(
         density = density,
         layoutDirection = layoutDirection,
         compositionContext = compositionContext,
-        focusable = true, // TODO
-        scene = this
+        focusable = false, // TODO
     )
 
     private fun attach(layer: AttachedComposeSceneLayer) {
@@ -350,7 +358,7 @@ private class CombinedComposeSceneImpl(
     }
 
     private fun detach(layer: AttachedComposeSceneLayer) {
-        check(!isClosed) { "ComposeScene is closed" }
+        if (isClosed) return
         owners.remove(layer.owner)
 
         if (layer.owner == focusedOwner) {
@@ -368,42 +376,56 @@ private class CombinedComposeSceneImpl(
         invalidateIfNeeded()
     }
 
-    private class AttachedComposeSceneLayer(
+    private inner class AttachedComposeSceneLayer(
         density: Density,
         layoutDirection: LayoutDirection,
         private val compositionContext: CompositionContext,
         override var focusable: Boolean,
-        private val scene: CombinedComposeSceneImpl,
     ) : ComposeSceneLayer {
         val owner = RootNodeOwner(
             density = density,
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
-            constraints = scene.constraints,
-            platformContext = scene.composeSceneContext.platformContext,
-            snapshotInvalidationTracker = scene.snapshotInvalidationTracker,
-            inputHandler = scene.inputHandler,
+            constraints = constraints,
+            platformContext = composeSceneContext.platformContext,
+            snapshotInvalidationTracker = snapshotInvalidationTracker,
+            inputHandler = inputHandler,
         )
         private var composition: Composition? = null
 
         override var density: Density by owner::density
         override var layoutDirection: LayoutDirection by owner::layoutDirection
         override var bounds: IntRect by owner::bounds
-        override var scrimColor: Color? = null // TODO
-        // blendMode = LocalComposeScene.requireCurrent().platform.dialogScrimBlendMode
-//        .drawBehind {
-//            drawRect(
-//                color = properties.scrimColor,
-//                blendMode = blendMode
-//            )
-//        }
+        override var scrimColor: Color? by mutableStateOf(null)
+
+        private val windowInfo
+            get() = composeSceneContext.platformContext.windowInfo
+
+        private val dialogScrimBlendMode
+            get() = if (windowInfo.isWindowTransparent) {
+                // Use background alpha channel to respect transparent window shape.
+                BlendMode.SrcAtop
+            } else {
+                BlendMode.SrcOver
+            }
+
+        private val background: Modifier
+            get() = scrimColor?.let {
+                Modifier.drawBehind {
+                    drawRect(
+                        color = it,
+                        blendMode = dialogScrimBlendMode
+                    )
+                }
+            } ?: Modifier
+        private var keyInput: Modifier by mutableStateOf(Modifier)
 
         init {
-            scene.attach(this)
+            attach(this)
         }
 
         override fun dispose() {
-            scene.detach(this)
+            detach(this)
             composition?.dispose()
             owner.dispose()
         }
@@ -411,10 +433,15 @@ private class CombinedComposeSceneImpl(
         override fun setKeyEventListener(
             onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
             onKeyEvent: ((KeyEvent) -> Boolean)?,
-        ) {owner.setRootModifier(KeyInputElement(
-                onKeyEvent = onKeyEvent,
-                onPreKeyEvent = onPreviewKeyEvent
-            ))
+        ) {
+            keyInput = if (onPreviewKeyEvent != null || onKeyEvent != null) {
+                Modifier.then(KeyInputElement(
+                    onKeyEvent = onKeyEvent,
+                    onPreKeyEvent = onPreviewKeyEvent
+                ))
+            } else {
+                Modifier
+            }
         }
 
         override fun setOutsidePointerEventListener(
@@ -425,10 +452,10 @@ private class CombinedComposeSceneImpl(
 
         override fun setContent(content: @Composable () -> Unit) {
             composition?.dispose()
-            composition = owner.setContent(
-                parent = compositionContext,
-                content = content
-            )
+            composition = owner.setContent(parent = compositionContext) {
+                owner.setRootModifier(background then keyInput)
+                content()
+            }
         }
     }
 }
