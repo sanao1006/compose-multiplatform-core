@@ -45,45 +45,6 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skiko.currentNanoTime
 
-@InternalComposeUiApi
-fun ComposeScene(
-    density: Density = Density(1f),
-    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    coroutineContext: CoroutineContext = Dispatchers.Unconfined,
-    composeSceneContext: ComposeSceneContext = EmptyComposeSceneContext,
-    invalidate: () -> Unit = {},
-): ComposeScene = SimpleComposeScene(
-    density = density,
-    layoutDirection = layoutDirection,
-    coroutineContext = coroutineContext,
-    composeSceneContext = composeSceneContext,
-    invalidate = invalidate
-)
-
-@InternalComposeUiApi
-fun CombinedComposeScene(
-    density: Density = Density(1f),
-    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    coroutineContext: CoroutineContext = Dispatchers.Unconfined,
-    composeSceneContext: ComposeSceneContext =  EmptyComposeSceneContext,
-    invalidate: () -> Unit = {},
-): ComposeScene {
-    TODO()
-}
-
-@OptIn(InternalComposeUiApi::class)
-internal val LocalComposeScene = staticCompositionLocalOf<ComposeScene?> { null }
-
-/**
- * The local [ComposeScene] is typically not-null. This extension can be used in these cases.
- */
-@OptIn(InternalComposeUiApi::class)
-@Composable
-internal fun CompositionLocal<ComposeScene?>.requireCurrent(): ComposeScene {
-    return current ?: error("CompositionLocal LocalComposeScene not provided")
-}
-
-
 /**
  * A virtual container that encapsulates Compose UI content. UI content can be constructed via
  * [setContent] method and with any Composable that manipulates [LayoutNode] tree.

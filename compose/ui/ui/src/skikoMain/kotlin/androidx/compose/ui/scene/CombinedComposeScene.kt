@@ -14,48 +14,89 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.window
+package androidx.compose.ui.scene
 
-import androidx.compose.ui.ComposeSceneInputHandler
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.node.SnapshotInvalidationTracker
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusOwner
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Composition
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.platform.Platform
+import androidx.compose.ui.platform.setContent
+import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.toIntRect
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachReversed
+import androidx.compose.ui.window.RootNodeOwner
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
 
-internal class CombinedRootNodeOwner(
-    snapshotInvalidationTracker: SnapshotInvalidationTracker,
-    inputHandler: ComposeSceneInputHandler,
-    platform: Platform,
+@InternalComposeUiApi
+fun CombinedComposeScene(
+    density: Density = Density(1f),
+    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+    coroutineContext: CoroutineContext = Dispatchers.Unconfined,
+    composeSceneContext: ComposeSceneContext =  EmptyComposeSceneContext,
+    invalidate: () -> Unit = {},
+): ComposeScene = CombinedComposeSceneImpl(
+    density = density,
+    layoutDirection = layoutDirection,
+    coroutineContext = coroutineContext,
+    composeSceneContext = composeSceneContext,
+    invalidate = invalidate
+)
+
+@OptIn(InternalComposeUiApi::class)
+private class CombinedComposeSceneImpl(
     density: Density,
-    coroutineContext: CoroutineContext,
     layoutDirection: LayoutDirection,
-    constraints: Constraints,
-    modifier: Modifier = Modifier,
-) : RootNodeOwner {
-    private var mainOwner = RootNodeOwnerImpl(
+    coroutineContext: CoroutineContext,
+    composeSceneContext: ComposeSceneContext,
+    invalidate: () -> Unit = {},
+) : BaseComposeScene(
+    coroutineContext = coroutineContext,
+    invalidate = invalidate
+) {
+    override var density: Density = density
+        set(value) {
+            check(!isClosed) { "ComposeScene is closed" }
+            field = value
+            mainOwner.density = value
+        }
+
+    override var layoutDirection: LayoutDirection = layoutDirection
+        set(value) {
+            check(!isClosed) { "ComposeScene is closed" }
+            field = value
+            mainOwner.layoutDirection = value
+        }
+
+    override var constraints: Constraints = Constraints()
+        set(value) {
+            check(!isClosed) { "ComposeScene is closed" }
+            field = value
+            mainOwner.constraints = constraints
+        }
+
+    override val semanticsOwner: SemanticsOwner
+        get() = mainOwner.semanticsOwner
+
+    private val mainOwner = RootNodeOwner(
+        density = density,
+        layoutDirection = layoutDirection,
+        coroutineContext = compositionContext.effectCoroutineContext,
+        constraints = constraints,
+        platformContext = composeSceneContext.platformContext,
         snapshotInvalidationTracker = snapshotInvalidationTracker,
         inputHandler = inputHandler,
-        platform = platform,
-        density = density,
-        coroutineContext = coroutineContext,
-        layoutDirection = layoutDirection,
-        constraints = constraints,
-        modifier = modifier
     )
 
     /**
@@ -63,57 +104,7 @@ internal class CombinedRootNodeOwner(
      * So that Popup opened from main owner will have bigger index.
      * This logic is used by accessibility.
      */
-    private val owners = mutableListOf<RootNodeOwner>(mainOwner)
-
-    private var focusedOwner: RootNodeOwner = this
-    private var gestureOwner: RootNodeOwner? = null
-    private var lastHoverOwner: RootNodeOwner? = null
-
-    override var constraints
-        get() = mainOwner.constraints
-        set(value) {
-            forEachOwner { it.constraints = value }
-            bounds = value.maxSize.toIntRect()
-        }
-
-    val accessibilityControllers
-        get() = owners.asReversed().map { it.accessibilityController }
-
-    private val _focusOwner = createFocusOwner(platform.focusManager)
-    override val focusOwner = object : FocusOwner by _focusOwner {
-        override fun takeFocus() {
-            val focusOwner = attachedOwners.findLast { it.focusable }?.focusOwner ?: _focusOwner
-            focusOwner.takeFocus()
-        }
-
-        override fun releaseFocus() {
-            _focusOwner.releaseFocus()
-            forEachAttachedOwner { it.focusOwner.releaseFocus() }
-        }
-
-        override fun moveFocus(focusDirection: FocusDirection): Boolean {
-            val focusOwner = attachedOwners.lastOrNull()?.focusOwner ?: _focusOwner
-            return focusOwner.moveFocus(focusDirection) ?: false
-        }
-    }
-
-    /**
-     * Find hovered owner for position of first pointer.
-     */
-    private fun hoveredOwner(event: PointerInputEvent): RootNodeOwner {
-        val position = event.pointers.first().position
-        return attachedOwners.lastOrNull { it.isInBounds(position) } ?: this
-    }
-
-    /**
-     * Check if [focusedOwner] blocks input for this owner.
-     */
-    private fun isInteractive(owner: RootNodeOwner?) =
-        when (owner) {
-            null -> true
-            this -> focusedOwner == this
-            else -> attachedOwners.indexOf(focusedOwner) <= attachedOwners.indexOf(owner)
-        }
+    private val owners = mutableListOf(mainOwner)
 
     // Cache to reduce allocations
     private val _ownersCopyCache = mutableListOf<RootNodeOwner>()
@@ -140,66 +131,29 @@ internal class CombinedRootNodeOwner(
             it.fastForEachReversed(action)
         }
 
-    internal fun attach(owner: RootNodeOwner) {
-        attachedOwners.add(owner)
-        owner.requestLayout = this.requestLayout
-        owner.requestDraw = this.requestDraw
-        owner.dispatchSnapshotChanges = this.dispatchSnapshotChanges
-        owner.constraints = this.constraints
-        if (owner.focusable) {
-            focusedOwner = owner
+    private var focusedOwner: RootNodeOwner = mainOwner
+    private var gestureOwner: RootNodeOwner? = null
+    private var lastHoverOwner: RootNodeOwner? = null
 
-            // Exit event to lastHoverOwner will be sent via synthetic event on next frame
-        }
+    override fun close() {
+        super.close()
+        mainOwner.dispose()
     }
 
-    internal fun detach(owner: RootNodeOwner) {
-        attachedOwners.remove(owner)
-        owner.dispatchSnapshotChanges = null
-        owner.requestDraw = null
-        owner.requestLayout = null
-        if (owner == focusedOwner) {
-            focusedOwner = attachedOwners.lastOrNull { it.focusable } ?: this
-
-            // Enter event to new focusedOwner will be sent via synthetic event on next frame
-        }
-        if (owner == lastHoverOwner) {
-            lastHoverOwner = null
-        }
-        if (owner == gestureOwner) {
-            gestureOwner = null
-        }
+    override fun calculateContentSize(): IntSize {
+        TODO("Not yet implemented")
     }
 
-    override fun hitTestInteropView(position: Offset): Boolean {
-        // TODO:
-        //  Temporary solution copying control flow from [processPress].
-        //  A proper solution is to send touches to scene as black box
-        //  and handle only that ones that were received in interop view
-        //  instead of using [pointInside].
-        attachedOwners.fastForEachReversed { owner ->
-            if (owner.isInBounds(position)) {
-                return owner.hitTestInteropView(position)
-            } else if (owner == focusedOwner) {
-                return false
-            }
-        }
-        return super.hitTestInteropView(position)
+    override fun createComposition(content: @Composable () -> Unit): Composition {
+        return mainOwner.setContent(
+            compositionContext,
+            { compositionLocalContext },
+            content = content
+        )
+        // TODO: Set LocalComposeScene
     }
 
-    override fun sendKeyEvent(keyEvent: KeyEvent): Boolean {
-        return focusedOwner.sendKeyEvent(keyEvent)
-    }
-
-    private fun forwardPointerInput(owner: RootNodeOwner?, event: PointerInputEvent) {
-        if (owner == this) {
-            super.processPointerInput(event)
-        } else {
-            owner?.processPointerInput(event)
-        }
-    }
-
-    override fun processPointerInput(event: PointerInputEvent) {
+    override fun processPointerInputEvent(event: PointerInputEvent) {
         when (event.eventType) {
             PointerEventType.Press -> processPress(event)
             PointerEventType.Release -> processRelease(event)
@@ -215,10 +169,35 @@ internal class CombinedRootNodeOwner(
         }
     }
 
+    override fun processKeyEvent(keyEvent: KeyEvent): Boolean =
+        mainOwner.onKeyEvent(keyEvent)
+
+    override fun measureAndLayout() {
+        mainOwner.measureAndLayout()
+    }
+
+    override fun draw(canvas: Canvas) {
+        mainOwner.draw(canvas)
+    }
+
+    /**
+     * Find hovered owner for position of first pointer.
+     */
+    private fun hoveredOwner(event: PointerInputEvent): RootNodeOwner {
+        val position = event.pointers.first().position
+        return owners.lastOrNull { it.isInBounds(position) } ?: mainOwner
+    }
+
+    /**
+     * Check if [focusedOwner] blocks input for this owner.
+     */
+    private fun isInteractive(owner: RootNodeOwner?): Boolean =
+        owner == null || owners.indexOf(focusedOwner) <= owners.indexOf(owner)
+
     private fun processPress(event: PointerInputEvent) {
         val currentGestureOwner = gestureOwner
         if (currentGestureOwner != null) {
-            forwardPointerInput(currentGestureOwner, event)
+            currentGestureOwner.onPointerInput(event)
             return
         }
         val position = event.pointers.first().position
@@ -226,13 +205,13 @@ internal class CombinedRootNodeOwner(
 
             // If the position of in bounds of the owner - send event to it and stop processing
             if (owner.isInBounds(position)) {
-                forwardPointerInput(owner, event)
+                owner.onPointerInput(event)
                 gestureOwner = owner
                 return
             }
 
             // Input event is out of bounds - send click outside notification
-            owner.onOutsidePointerEvent?.invoke(event)
+            // TODO owner.onOutsidePointerEvent?.invoke(event)
 
             // if the owner is in focus, do not pass the event to underlying owners
             if (owner == focusedOwner) {
@@ -243,7 +222,7 @@ internal class CombinedRootNodeOwner(
 
     private fun processRelease(event: PointerInputEvent) {
         // Send Release to gestureOwner even if is not hovered or under focusedOwner
-        forwardPointerInput(gestureOwner, event)
+        gestureOwner?.onPointerInput(event)
         if (!event.isGestureInProgress) {
             val owner = hoveredOwner(event)
             if (isInteractive(owner)) {
@@ -253,7 +232,7 @@ internal class CombinedRootNodeOwner(
                 // - It's not focusedOwner
                 // - It placed under focusedOwner or not exist at all
                 // In all these cases the even happened outside focused owner bounds
-                focusedOwner.onOutsidePointerEvent?.invoke(event)
+                // TODO focusedOwner.onOutsidePointerEvent?.invoke(event)
             }
         }
     }
@@ -277,7 +256,7 @@ internal class CombinedRootNodeOwner(
         if (processHover(event, owner)) {
             return
         }
-        forwardPointerInput(owner, event.copy(eventType = PointerEventType.Move))
+        owner?.onPointerInput(event.copy(eventType = PointerEventType.Move))
     }
 
     /**
@@ -298,8 +277,8 @@ internal class CombinedRootNodeOwner(
             // Owner wasn't changed
             return false
         }
-        forwardPointerInput(lastHoverOwner, event.copy(eventType = PointerEventType.Exit))
-        forwardPointerInput(owner, event.copy(eventType = PointerEventType.Enter))
+        lastHoverOwner?.onPointerInput(event.copy(eventType = PointerEventType.Exit))
+        owner?.onPointerInput(event.copy(eventType = PointerEventType.Enter))
         lastHoverOwner = owner
 
         // Changing hovering state replaces Move event, so treat it as consumed
@@ -309,7 +288,7 @@ internal class CombinedRootNodeOwner(
     private fun processScroll(event: PointerInputEvent) {
         val owner = hoveredOwner(event)
         if (isInteractive(owner)) {
-            forwardPointerInput(owner, event)
+            owner.onPointerInput(event)
         }
     }
 }

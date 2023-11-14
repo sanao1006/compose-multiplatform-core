@@ -30,9 +30,25 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.RootNodeOwner
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
+
+@InternalComposeUiApi
+fun ComposeScene(
+    density: Density = Density(1f),
+    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+    coroutineContext: CoroutineContext = Dispatchers.Unconfined,
+    composeSceneContext: ComposeSceneContext = EmptyComposeSceneContext,
+    invalidate: () -> Unit = {},
+): ComposeScene = SimpleComposeSceneImpl(
+    density = density,
+    layoutDirection = layoutDirection,
+    coroutineContext = coroutineContext,
+    composeSceneContext = composeSceneContext,
+    invalidate = invalidate
+)
 
 @OptIn(InternalComposeUiApi::class)
-internal class SimpleComposeScene(
+private class SimpleComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
     coroutineContext: CoroutineContext,

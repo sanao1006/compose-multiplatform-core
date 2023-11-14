@@ -81,7 +81,7 @@ internal abstract class BaseComposeScene(
         hasPendingDraws = frameClock.hasAwaiters ||
             snapshotInvalidationTracker.hasInvalidations ||
             inputHandler.hasInvalidations
-        if (hasPendingDraws && !isInvalidationDisabled && !isClosed) {
+        if (hasPendingDraws && !isInvalidationDisabled && !isClosed && composition != null) {
             invalidate()
         }
     }
