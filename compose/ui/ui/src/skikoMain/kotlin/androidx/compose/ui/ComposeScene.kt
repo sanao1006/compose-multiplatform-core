@@ -29,6 +29,7 @@ import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.scene.ComposeSceneContext
 import androidx.compose.ui.scene.ComposeSceneLayer
+import androidx.compose.ui.scene.EmptyComposeSceneContext
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.*
 import kotlin.coroutines.CoroutineContext
@@ -107,17 +108,10 @@ class ComposeScene internal constructor(
         invalidate: () -> Unit = {}
     ) : this(
         coroutineContext = coroutineContext,
-        composeSceneContext = object : ComposeSceneContext {
+        composeSceneContext = object : ComposeSceneContext by EmptyComposeSceneContext {
             override val platformContext = EmptyPlatformContext(
                 textInputService = textInputService
             )
-            override fun createPlatformLayer(
-                density: Density,
-                layoutDirection: LayoutDirection,
-                compositionContext: CompositionContext
-            ): ComposeSceneLayer {
-                TODO("Not yet implemented")
-            }
         },
         density = density,
         layoutDirection = layoutDirection,
@@ -244,9 +238,7 @@ class ComposeScene internal constructor(
      *
      * @param content Content of the [ComposeScene]
      */
-    fun setContent(
-        content: @Composable () -> Unit
-    ) {
+    fun setContent(content: @Composable () -> Unit) {
         replacement.setContent(content)
     }
 
@@ -305,12 +297,12 @@ class ComposeScene internal constructor(
      */
     @ExperimentalComposeUiApi
     fun releaseFocus() {
-        TODO()
+        replacement.releaseFocus()
     }
 
     @ExperimentalComposeUiApi
     fun requestFocus() {
-        TODO()
+        replacement.requestFocus()
     }
 
     /**
@@ -323,6 +315,6 @@ class ComposeScene internal constructor(
      */
     @ExperimentalComposeUiApi
     fun moveFocus(focusDirection: FocusDirection): Boolean {
-        TODO()
+        return replacement.moveFocus(focusDirection)
     }
 }

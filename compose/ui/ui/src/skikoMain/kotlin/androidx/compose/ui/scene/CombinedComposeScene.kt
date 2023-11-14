@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
@@ -106,6 +107,7 @@ private class CombinedComposeSceneImpl(
     )
 
     private val attachedLayers = mutableListOf<AttachedComposeSceneLayer>()
+    private var isFocused = false
 
     /**
      * Contains all registered [RootNodeOwner] (main frame, popups, etc.) in order of registration.
@@ -142,6 +144,9 @@ private class CombinedComposeSceneImpl(
     private var focusedOwner: RootNodeOwner = mainOwner
     private var gestureOwner: RootNodeOwner? = null
     private var lastHoverOwner: RootNodeOwner? = null
+
+    private val lastFocusableOwner
+        get() = attachedLayers.lastOrNull { it.focusable }?.owner ?: mainOwner
 
     override fun close() {
         super.close()
@@ -300,6 +305,20 @@ private class CombinedComposeSceneImpl(
         }
     }
 
+    override fun releaseFocus() {
+        forEachOwner { it.focusOwner.releaseFocus() }
+        isFocused = false
+    }
+
+    override fun requestFocus() {
+        focusedOwner.focusOwner.takeFocus()
+        isFocused = true
+    }
+
+    override fun moveFocus(focusDirection: FocusDirection): Boolean {
+        return focusedOwner.focusOwner.moveFocus(focusDirection)
+    }
+
     override fun createLayer(
         density: Density,
         layoutDirection: LayoutDirection,
@@ -321,12 +340,13 @@ private class CombinedComposeSceneImpl(
 
             // Exit event to lastHoverOwner will be sent via synthetic event on next frame
         }
-        // TODO
-//        if (isFocused) {
-//            owner.focusOwner.takeFocus()
-//        } else {
-//            owner.focusOwner.releaseFocus()
-//        }
+        with(layer.owner.focusOwner) {
+            if (isFocused) {
+                takeFocus()
+            } else {
+                releaseFocus()
+            }
+        }
         inputHandler.onPointerUpdate()
         invalidateIfNeeded()
     }
@@ -336,7 +356,7 @@ private class CombinedComposeSceneImpl(
         owners.remove(layer.owner)
 
         if (layer.owner == focusedOwner) {
-            focusedOwner = attachedLayers.lastOrNull { it.focusable }?.owner ?: mainOwner
+            focusedOwner = lastFocusableOwner
 
             // Enter event to new focusedOwner will be sent via synthetic event on next frame
         }
