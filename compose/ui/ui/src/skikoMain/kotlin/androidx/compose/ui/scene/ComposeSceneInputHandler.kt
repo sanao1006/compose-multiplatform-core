@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui
+package androidx.compose.ui.scene
 
+import androidx.compose.ui.ComposeScene
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.NativeKeyEvent
@@ -24,14 +25,17 @@ import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputEvent
-import androidx.compose.ui.input.pointer.PointerInputEventData
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.SyntheticEventSender
 import androidx.compose.ui.input.pointer.areAnyPressed
 import androidx.compose.ui.input.pointer.copyFor
 import org.jetbrains.skiko.currentNanoTime
 
+/**
+ * Handles input events for [ComposeScene].
+ *
+ * @see SyntheticEventSender
+ */
 internal class ComposeSceneInputHandler(
     processPointerInputEvent: (PointerInputEvent) -> Unit,
     private val processKeyEvent: (KeyEvent) -> Boolean,
@@ -68,7 +72,7 @@ internal class ComposeSceneInputHandler(
 
         onPointerEvent(
             eventType,
-            listOf(ComposeScene.Pointer(PointerId(0), position, actualButtons.areAnyPressed, type)),
+            listOf(ComposeScenePointer(PointerId(0), position, actualButtons.areAnyPressed, type)),
             actualButtons,
             actualKeyboardModifiers,
             scrollDelta,
@@ -80,7 +84,7 @@ internal class ComposeSceneInputHandler(
 
     fun onPointerEvent(
         eventType: PointerEventType,
-        pointers: List<ComposeScene.Pointer>,
+        pointers: List<ComposeScenePointer>,
         buttons: PointerButtons = PointerButtons(),
         keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
         scrollDelta: Offset = Offset(0f, 0f),
@@ -88,7 +92,7 @@ internal class ComposeSceneInputHandler(
         nativeEvent: Any? = null,
         button: PointerButton? = null,
     ) {
-        val event = pointerInputEvent(
+        val event = PointerInputEvent(
             eventType,
             pointers,
             timeMillis,
@@ -102,10 +106,6 @@ internal class ComposeSceneInputHandler(
         updatePointerPositions(event)
     }
 
-    /**
-     * Send [KeyEvent] to the content.
-     * @return true if the event was consumed by the content
-     */
     fun onKeyEvent(keyEvent: KeyEvent): Boolean {
         defaultPointerStateTracker.onKeyEvent(keyEvent)
         return processKeyEvent(keyEvent)
@@ -167,36 +167,3 @@ private class DefaultPointerStateTracker {
 }
 
 internal expect fun NativeKeyEvent.toPointerKeyboardModifiers(): PointerKeyboardModifiers
-
-@OptIn(ExperimentalComposeUiApi::class)
-private fun pointerInputEvent(
-    eventType: PointerEventType,
-    pointers: List<ComposeScene.Pointer>,
-    timeMillis: Long,
-    nativeEvent: Any?,
-    scrollDelta: Offset,
-    buttons: PointerButtons,
-    keyboardModifiers: PointerKeyboardModifiers,
-    changedButton: PointerButton?
-) = PointerInputEvent(
-    eventType,
-    timeMillis,
-    pointers.map {
-        PointerInputEventData(
-            it.id,
-            timeMillis,
-            it.position,
-            it.position,
-            it.pressed,
-            it.pressure,
-            it.type,
-            issuesEnterExit = it.type == PointerType.Mouse,
-            historical = it.historical,
-            scrollDelta = scrollDelta
-        )
-    },
-    buttons,
-    keyboardModifiers,
-    nativeEvent,
-    changedButton
-)

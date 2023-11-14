@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui
+package androidx.compose.ui.scene
 
+import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.Recomposer
 import androidx.compose.ui.platform.FlushCoroutineDispatcher
@@ -25,6 +26,15 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+/**
+ * The scheduler for performing recomposition and applying updates to one or more [Composition]s.
+ *
+ * The main difference from [Recomposer] is separate dispatchers for LaunchEffect and other
+ * recompositions that allows more precise status checking.
+ *
+ * @param coroutineContext The coroutine context to use for the compositor.
+ * @param elements Additional coroutine context elements to include in context.
+ */
 internal class ComposeSceneRecomposer(
     coroutineContext: CoroutineContext,
     vararg elements: CoroutineContext.Element
@@ -32,12 +42,17 @@ internal class ComposeSceneRecomposer(
     private val job = Job()
     private val coroutineScope = CoroutineScope(coroutineContext + job)
 
-    // We use FlushCoroutineDispatcher for effectDispatcher not because we need `flush` for
-    // LaunchEffect tasks, but because we need to know if it is idle (hasn't scheduled tasks)
+    /**
+     * We use [FlushCoroutineDispatcher] not because we need [flush] for
+     * LaunchEffect tasks, but because we need to know if it is idle (hasn't scheduled tasks)
+     */
     private val effectDispatcher = FlushCoroutineDispatcher(coroutineScope)
     private val recomposeDispatcher = FlushCoroutineDispatcher(coroutineScope)
     private val recomposer = Recomposer(coroutineContext + job + effectDispatcher)
 
+    /**
+     * `true` if there is any pending work scheduled, regardless of whether it is currently running.
+     */
     val hasPendingWork: Boolean
         get() = recomposer.hasPendingWork ||
         effectDispatcher.hasTasks() ||
@@ -58,10 +73,19 @@ internal class ComposeSceneRecomposer(
         }
     }
 
+    /**
+     * Perform all scheduled tasks and wait for the tasks which are already
+     * performing in the recomposition scope.
+     */
     fun flush() {
         recomposeDispatcher.flush()
     }
 
+    /**
+     * Permanently shut down this [Recomposer] for future use.
+     *
+     * @see Recomposer.cancel
+     */
     fun cancel() {
         recomposer.cancel()
         job.cancel()

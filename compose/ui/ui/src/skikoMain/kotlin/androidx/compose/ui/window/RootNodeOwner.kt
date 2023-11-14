@@ -22,8 +22,6 @@ import androidx.compose.runtime.collection.mutableVectorOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ComposeScene
-import androidx.compose.ui.ComposeSceneInputHandler
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -63,15 +61,17 @@ import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.LayoutNodeDrawScope
 import androidx.compose.ui.node.MeasureAndLayoutDelegate
 import androidx.compose.ui.node.Owner
-import androidx.compose.ui.node.SnapshotInvalidationTracker
 import androidx.compose.ui.platform.DefaultAccessibilityManager
 import androidx.compose.ui.platform.DefaultHapticFeedback
 import androidx.compose.ui.platform.DefaultUiApplier
 import androidx.compose.ui.platform.PlatformClipboardManager
 import androidx.compose.ui.platform.PlatformContext
+import androidx.compose.ui.platform.PlatformRootForTest
 import androidx.compose.ui.platform.RenderNodeLayer
-import androidx.compose.ui.platform.SkiaRootForTest
 import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.scene.ComposeSceneInputHandler
+import androidx.compose.ui.scene.ComposeScenePointer
+import androidx.compose.ui.scene.SnapshotInvalidationTracker
 import androidx.compose.ui.semantics.EmptySemanticsElement
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.ExperimentalTextApi
@@ -121,16 +121,16 @@ internal fun RootNodeOwner(
     density: Density,
     layoutDirection: LayoutDirection,
     coroutineContext: CoroutineContext,
-    constraints: Constraints,
     platformContext: PlatformContext,
+    constraints: Constraints,
     snapshotInvalidationTracker: SnapshotInvalidationTracker,
     inputHandler: ComposeSceneInputHandler,
 ) : RootNodeOwner = RootNodeOwnerImpl(
     density = density,
     layoutDirection = layoutDirection,
     coroutineContext = coroutineContext,
-    constraints = constraints,
     platformContext = platformContext,
+    constraints = constraints,
     snapshotInvalidationTracker = snapshotInvalidationTracker,
     inputHandler = inputHandler
 )
@@ -145,11 +145,11 @@ private class RootNodeOwnerImpl(
     density: Density,
     layoutDirection: LayoutDirection,
     override val coroutineContext: CoroutineContext,
-    override var constraints: Constraints,
     private val platformContext: PlatformContext,
+    override var constraints: Constraints,
     private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
     private val inputHandler: ComposeSceneInputHandler,
-) : Owner, RootNodeOwner, SkiaRootForTest {
+) : Owner, RootNodeOwner, PlatformRootForTest {
     override val windowInfo: WindowInfo
         get() = platformContext.windowInfo
 
@@ -453,7 +453,7 @@ private class RootNodeOwnerImpl(
      */
     override fun sendPointerEvent(
         eventType: PointerEventType,
-        pointers: List<ComposeScene.Pointer>,
+        pointers: List<ComposeScenePointer>,
         buttons: PointerButtons,
         keyboardModifiers: PointerKeyboardModifiers,
         scrollDelta: Offset,

@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.node
+package androidx.compose.ui.scene
 
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.node.OwnerSnapshotObserver
 
 /**
  * SnapshotCommandList is a class that manages commands and invalidations for snapshot-based recomposition.

@@ -16,7 +16,6 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.ui.ComposeScene
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +25,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.unit.IntSize
 import org.jetbrains.skiko.currentNanoTime
 
@@ -34,7 +34,7 @@ import org.jetbrains.skiko.currentNanoTime
  * To be used in tests.
  */
 @InternalComposeUiApi
-interface SkiaRootForTest : RootForTest {
+interface PlatformRootForTest : RootForTest {
     /**
      * See [WindowInfo.containerSize]
      */
@@ -71,7 +71,7 @@ interface SkiaRootForTest : RootForTest {
     @ExperimentalComposeUiApi
     fun sendPointerEvent(
         eventType: PointerEventType,
-        pointers: List<ComposeScene.Pointer>,
+        pointers: List<ComposeScenePointer>,
         buttons: PointerButtons = PointerButtons(),
         keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
         scrollDelta: Offset = Offset(0f, 0f),

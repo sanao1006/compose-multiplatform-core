@@ -15,6 +15,10 @@
  */
 package androidx.compose.ui.platform
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
@@ -94,24 +98,19 @@ class EmptyPlatformContext(
     override fun requestFocus(): Boolean = false
 }
 
-internal fun DefaultInputModeManager(
+internal class DefaultInputModeManager(
     initialInputMode: InputMode = InputMode.Keyboard
 ) : InputModeManager {
-    lateinit var inputModeManager: InputModeManagerImpl
+    override var inputMode: InputMode by mutableStateOf(initialInputMode)
 
-    inputModeManager = InputModeManagerImpl(
-        initialInputMode = initialInputMode,
-        onRequestInputModeChange = {
-            if (it == InputMode.Touch || it == InputMode.Keyboard) {
-                inputModeManager.inputMode = it
-                true
-            } else {
-                false
-            }
+    @ExperimentalComposeUiApi
+    override fun requestInputMode(inputMode: InputMode) =
+        if (inputMode == InputMode.Touch || inputMode == InputMode.Keyboard) {
+            this.inputMode = inputMode
+            true
+        } else {
+            false
         }
-    )
-
-    return inputModeManager
 }
 
 internal object EmptyViewConfiguration : ViewConfiguration {
@@ -121,7 +120,7 @@ internal object EmptyViewConfiguration : ViewConfiguration {
     override val touchSlop: Float = 18f
 }
 
-private object EmptyPlatformTextInputService : PlatformTextInputService {
+internal object EmptyPlatformTextInputService : PlatformTextInputService {
     override fun startInput(
         value: TextFieldValue,
         imeOptions: ImeOptions,

@@ -13,41 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package androidx.compose.ui
 
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
+import org.jetbrains.skia.Canvas as SkCanvas
 import androidx.compose.runtime.*
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.input.key.KeyInputElement
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.scene.ComposeSceneContext
+import androidx.compose.ui.scene.ComposeSceneLayer
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.RootNodeOwner
 import kotlin.coroutines.CoroutineContext
-import kotlin.jvm.Volatile
 import kotlinx.coroutines.*
-import org.jetbrains.skia.Canvas as SkCanvas
-import androidx.compose.ui.graphics.Canvas
-import androidx.compose.ui.node.SnapshotInvalidationTracker
-
-internal val LocalComposeScene = staticCompositionLocalOf<ComposeScene?> { null }
-
-/**
- * The local [ComposeScene] is typically not-null. This extension can be used in these cases.
- */
-@Composable
-internal fun CompositionLocal<ComposeScene?>.requireCurrent(): ComposeScene {
-    return current ?: error("CompositionLocal LocalComposeScene not provided")
-}
+import org.jetbrains.skiko.currentNanoTime
 
 /**
  * A virtual container that encapsulates Compose UI content. UI content can be constructed via
@@ -63,14 +49,18 @@ internal fun CompositionLocal<ComposeScene?>.requireCurrent(): ComposeScene {
  * - [hasInvalidations] can be called from any thread
  * - [invalidate] callback can be called from any thread
  */
+@Deprecated(
+    "Replaced with interface in scene package",
+    replaceWith = ReplaceWith("androidx.compose.ui.scene.ComposeScene")
+)
 @OptIn(InternalComposeUiApi::class)
 class ComposeScene internal constructor(
-    coroutineContext: CoroutineContext = Dispatchers.Unconfined,
-    private val context: ComposeSceneContext,
-    density: Density = Density(1f),
-    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    private val invalidate: () -> Unit = {}
-) : BaseComposeScene() {
+    coroutineContext: CoroutineContext,
+    composeSceneContext: ComposeSceneContext,
+    density: Density,
+    layoutDirection: LayoutDirection,
+    invalidate: () -> Unit
+) {
     /**
      * Constructs [ComposeScene]
      *
@@ -89,14 +79,11 @@ class ComposeScene internal constructor(
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
         invalidate: () -> Unit = {}
     ) : this(
-        coroutineContext,
-        object : ComposeSceneContext {
-            @InternalComposeUiApi
-            override val platformContext = EmptyPlatformContext()
-        },
-        density,
-        layoutDirection,
-        invalidate
+        textInputService = EmptyPlatformTextInputService,
+        coroutineContext = coroutineContext,
+        density = density,
+        layoutDirection = layoutDirection,
+        invalidate = invalidate
     )
 
     /**
@@ -119,16 +106,22 @@ class ComposeScene internal constructor(
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
         invalidate: () -> Unit = {}
     ) : this(
-        coroutineContext,
-        object : ComposeSceneContext {
-            @InternalComposeUiApi
+        coroutineContext = coroutineContext,
+        composeSceneContext = object : ComposeSceneContext {
             override val platformContext = EmptyPlatformContext(
                 textInputService = textInputService
             )
+            override fun createPlatformLayer(
+                density: Density,
+                layoutDirection: LayoutDirection,
+                compositionContext: CompositionContext
+            ): ComposeSceneLayer {
+                TODO("Not yet implemented")
+            }
         },
-        density,
-        layoutDirection,
-        invalidate,
+        density = density,
+        layoutDirection = layoutDirection,
+        invalidate = invalidate,
     )
 
     /**
@@ -146,10 +139,11 @@ class ComposeScene internal constructor(
         density: Density = Density(1f),
         invalidate: () -> Unit = {}
     ) : this(
-        coroutineContext,
-        density,
-        LayoutDirection.Ltr,
-        invalidate
+        textInputService = EmptyPlatformTextInputService,
+        coroutineContext = coroutineContext,
+        density = density,
+        layoutDirection = LayoutDirection.Ltr,
+        invalidate = invalidate
     )
 
     /**
@@ -169,130 +163,51 @@ class ComposeScene internal constructor(
         density: Density = Density(1f),
         invalidate: () -> Unit = {}
     ) : this(
-        textInputService,
-        coroutineContext,
-        density,
-        LayoutDirection.Ltr,
-        invalidate,
+        textInputService = textInputService,
+        coroutineContext = coroutineContext,
+        density = density,
+        layoutDirection = LayoutDirection.Ltr,
+        invalidate = invalidate
     )
 
-    private val snapshotInvalidationTracker = SnapshotInvalidationTracker(::invalidateIfNeeded)
-    private val frameClock = BroadcastFrameClock(onNewAwaiters = ::invalidateIfNeeded)
-    private val recomposer: ComposeSceneRecomposer =
-        ComposeSceneRecomposer(coroutineContext, frameClock)
-    private val inputHandler: ComposeSceneInputHandler =
-        ComposeSceneInputHandler(::processPointerInputEvent, ::processKeyEvent)
-
-    private var isInvalidationDisabled = false
-    private inline fun <T> postponeInvalidation(crossinline block: () -> T): T {
-        check(!isClosed) { "ComposeScene is closed" }
-        isInvalidationDisabled = true
-        val result = try {
-            // Try to get see the up-to-date state before running block
-            // Note that this doesn't guarantee it, if sendApplyNotifications is called concurrently
-            // in a different thread than this code.
-            snapshotInvalidationTracker.sendAndPerformSnapshotChanges()
-            block()
-        } finally {
-            isInvalidationDisabled = false
-        }
-        invalidateIfNeeded()
-        return result
-    }
-
-    @Volatile
-    private var hasPendingDraws = true
-    private fun invalidateIfNeeded() {
-        hasPendingDraws = frameClock.hasAwaiters ||
-            snapshotInvalidationTracker.hasInvalidations ||
-            inputHandler.hasInvalidations
-        if (hasPendingDraws && !isInvalidationDisabled && !isClosed) {
-            invalidate()
-        }
-    }
+    private val replacement = androidx.compose.ui.scene.ComposeScene(
+        density = density,
+        layoutDirection = layoutDirection,
+        coroutineContext = coroutineContext,
+        composeSceneContext = composeSceneContext,
+        invalidate = invalidate,
+    )
 
     @Suppress("unused")
     @Deprecated(
         message = "The scene isn't tracking list of roots anymore",
         level = DeprecationLevel.ERROR,
-        replaceWith = ReplaceWith("SkiaRootForTest.onRootCreatedCallback")
+        replaceWith = ReplaceWith("PlatformContext.RootForTestListener")
     )
     val roots: Set<RootForTest>
         get() = throw NotImplementedError()
 
     /**
-     * Semantics owner that owns [SemanticsNode] objects and notifies listeners of changes to the
-     * semantics tree.
-     */
-    @ExperimentalComposeUiApi
-    val semanticsOwner: SemanticsOwner
-        get() = mainOwner.semanticsOwner
-
-    /**
-     * The mouse cursor position or null if cursor is not inside a scene.
-     */
-    internal val lastKnownCursorPosition: Offset?
-        get() = inputHandler.lastKnownCursorPosition
-
-    /**
      * Density of the content which will be used to convert [dp] units.
      */
-    var density: Density = density
-        set(value) {
-            check(!isClosed) { "ComposeScene is closed" }
-            field = value
-            mainOwner.density = value
-        }
+    var density: Density by replacement::density
 
     /**
      * The layout direction of the content, provided to the composition via [LocalLayoutDirection].
      */
     @ExperimentalComposeUiApi
-    var layoutDirection: LayoutDirection = layoutDirection
-        set(value) {
-            check(!isClosed) { "ComposeScene is closed" }
-            field = value
-            mainOwner.layoutDirection = value
-        }
+    var layoutDirection: LayoutDirection by replacement::layoutDirection
 
     /**
      * Constraints used to measure and layout content.
      */
-    override var constraints: Constraints = Constraints()
-        set(value) {
-            field = value
-            mainOwner.constraints = constraints
-        }
+    var constraints: Constraints by replacement::constraints
 
     /**
      * Returns the current content size
      */
-    override val contentSize: IntSize
-        get() {
-            check(!isClosed) { "ComposeScene is closed" }
-            measureAndLayout()
-            return mainOwner.contentSize
-        }
-
-    private val mainOwner by lazy {
-        RootNodeOwner(
-            density = density,
-            layoutDirection = layoutDirection,
-            coroutineContext = recomposer.compositionContext.effectCoroutineContext,
-            constraints = constraints,
-            platformContext = context.platformContext,
-            snapshotInvalidationTracker = snapshotInvalidationTracker,
-            inputHandler = inputHandler,
-        )
-    }
-    private var composition: Composition? = null
-
-
-    private var isClosed = false
-
-    init {
-        GlobalSnapshotManager.ensureStarted()
-    }
+    val contentSize: IntSize
+        get() = replacement.calculateContentSize()
 
     /**
      * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
@@ -304,25 +219,21 @@ class ComposeScene internal constructor(
      * After calling this method, you cannot call any other method of this [ComposeScene].
      */
     fun close() {
-        check(!isClosed) { "ComposeScene is already closed" }
-        composition?.dispose()
-        mainOwner.dispose()
-        recomposer.cancel()
-        isClosed = true
+        replacement.close()
     }
 
     /**
      * Returns true if there are pending recompositions, renders or dispatched tasks.
      * Can be called from any thread.
      */
-    override fun hasInvalidations() = hasPendingDraws || recomposer.hasPendingWork
+    fun hasInvalidations() = replacement.hasInvalidations()
 
     /**
      * Top-level composition locals, which will be provided for the Composable content, which is set by [setContent].
      *
      * `null` if no composition locals should be provided.
      */
-    var compositionLocalContext: CompositionLocalContext? by mutableStateOf(null)
+    var compositionLocalContext: CompositionLocalContext? by replacement::compositionLocalContext
 
     /**
      * Update the composition with the content described by the [content] composable. After this
@@ -333,150 +244,60 @@ class ComposeScene internal constructor(
      *
      * @param content Content of the [ComposeScene]
      */
-    override fun setContent(
-        content: @Composable () -> Unit
-    ) = setContent(
-        parentComposition = null,
-        content = content
-    )
-
-    // TODO(demin): We should configure routing of key events if there
-    //  are any popups/root present:
-    //   - ComposeScene.sendKeyEvent
-    //   - ComposeScene.onPreviewKeyEvent (or Window.onPreviewKeyEvent)
-    //   - Popup.onPreviewKeyEvent
-    //   - NestedPopup.onPreviewKeyEvent
-    //   - NestedPopup.onKeyEvent
-    //   - Popup.onKeyEvent
-    //   - ComposeScene.onKeyEvent
-    //  Currently we have this routing:
-    //   - [active Popup or the main content].onPreviewKeyEvent
-    //   - [active Popup or the main content].onKeyEvent
-    //   After we change routing, we can remove onPreviewKeyEvent/onKeyEvent from this method
-    internal fun setContent(
-        parentComposition: CompositionContext? = null,
-        onPreviewKeyEvent: (ComposeKeyEvent) -> Boolean = { false },
-        onKeyEvent: (ComposeKeyEvent) -> Boolean = { false },
+    fun setContent(
         content: @Composable () -> Unit
     ) {
-        check(!isClosed) { "ComposeScene is closed" }
-        inputHandler.onChangeContent()
-        composition?.dispose()
-
-        this.mainOwner.setRootModifier(KeyInputElement(
-            onKeyEvent = onKeyEvent,
-            onPreKeyEvent = onPreviewKeyEvent
-        ))
-        if (isFocused) {
-            this.mainOwner.focusOwner.takeFocus()
-        } else {
-            this.mainOwner.focusOwner.releaseFocus()
-        }
-
-        inputHandler.onPointerUpdate()
-        invalidateIfNeeded()
-
-        // setContent might spawn more owners, so this.mainOwner should be set before that.
-        composition = mainOwner.setContent(
-            parentComposition ?: recomposer.compositionContext,
-            { compositionLocalContext }
-        ) {
-            CompositionLocalProvider(
-                LocalComposeScene provides this,
-                content = content
-            )
-        }
-
-        // to perform all pending work synchronously
-        recomposer.flush()
+        replacement.setContent(content)
     }
-
-    internal fun hitTestInteropView(position: Offset): Boolean =
-        mainOwner.hitTestInteropView(position)
 
     /**
      * Render the current content on [canvas]. Passed [nanoTime] will be used to drive all
      * animations in the content (or any other code, which uses [withFrameNanos]
      */
-    fun render(canvas: SkCanvas, nanoTime: Long): Unit = postponeInvalidation {
-        recomposer.flush()
-        frameClock.sendFrame(nanoTime) // Recomposition
-
-        measureAndLayout()
-        draw(canvas.asComposeCanvas())
+    fun render(canvas: SkCanvas, nanoTime: Long) {
+        replacement.render(canvas.asComposeCanvas(), nanoTime)
     }
 
-    override fun sendPointerEvent(
+    /**
+     * Send pointer event to the content.
+     *
+     * @param eventType Indicates the primary reason that the event was sent.
+     * @param position The [Offset] of the current pointer event, relative to the content.
+     * @param scrollDelta scroll delta for the PointerEventType.Scroll event
+     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`) time
+     * is platform-dependent.
+     * @param type The device type that produced the event, such as [mouse][PointerType.Mouse],
+     * or [touch][PointerType.Touch].
+     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after the event.
+     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control,
+     * and Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
+     * @param nativeEvent The original native event.
+     * @param button Represents the index of a button which state changed in this event. It's null
+     * when there was no change of the buttons state or when button is not applicable (e.g. touch event).
+     */
+    fun sendPointerEvent(
         eventType: PointerEventType,
         position: Offset,
-        scrollDelta: Offset,
-        timeMillis: Long,
-        type: PointerType,
-        buttons: PointerButtons?,
-        keyboardModifiers: PointerKeyboardModifiers?,
-        nativeEvent: Any?,
-        button: PointerButton?
-    ) = postponeInvalidation {
-        measureAndLayout()
-        inputHandler.onPointerEvent(
-            eventType = eventType,
-            position = position,
-            scrollDelta = scrollDelta,
-            timeMillis = timeMillis,
-            type = type,
-            buttons = buttons,
-            keyboardModifiers = keyboardModifiers,
-            nativeEvent = nativeEvent,
-            button = button
+        scrollDelta: Offset = Offset(0f, 0f),
+        timeMillis: Long = (currentNanoTime() / 1E6).toLong(),
+        type: PointerType = PointerType.Mouse,
+        buttons: PointerButtons? = null,
+        keyboardModifiers: PointerKeyboardModifiers? = null,
+        nativeEvent: Any? = null,
+        button: PointerButton? = null
+    ) {
+        replacement.sendPointerEvent(
+            eventType, position, scrollDelta, timeMillis, type, buttons, keyboardModifiers, nativeEvent, button
         )
     }
 
-    @ExperimentalComposeUiApi
-    override fun sendPointerEvent(
-        eventType: PointerEventType,
-        pointers: List<Pointer>,
-        buttons: PointerButtons,
-        keyboardModifiers: PointerKeyboardModifiers,
-        scrollDelta: Offset,
-        timeMillis: Long,
-        nativeEvent: Any?,
-        button: PointerButton?,
-    ) = postponeInvalidation {
-        measureAndLayout()
-        inputHandler.onPointerEvent(
-            eventType = eventType,
-            pointers = pointers,
-            buttons = buttons,
-            keyboardModifiers = keyboardModifiers,
-            scrollDelta = scrollDelta,
-            timeMillis = timeMillis,
-            nativeEvent = nativeEvent,
-            button = button
-        )
+    /**
+     * Send [KeyEvent] to the content.
+     * @return true if the event was consumed by the content
+     */
+    fun sendKeyEvent(event: ComposeKeyEvent): Boolean {
+        return replacement.sendKeyEvent(event)
     }
-
-    override fun sendKeyEvent(keyEvent: KeyEvent): Boolean = postponeInvalidation {
-        inputHandler.onKeyEvent(keyEvent)
-    }
-
-    private fun processPointerInputEvent(event: PointerInputEvent) =
-        mainOwner.onPointerInput(event)
-
-    private fun processKeyEvent(keyEvent: KeyEvent): Boolean =
-        mainOwner.onKeyEvent(keyEvent)
-
-    private fun measureAndLayout() {
-        snapshotInvalidationTracker.onLayout()
-        mainOwner.measureAndLayout()
-        inputHandler.onLayout()
-    }
-
-    private fun draw(canvas: Canvas) {
-        snapshotInvalidationTracker.onDraw()
-        mainOwner.draw(canvas)
-    }
-
-    private var isFocused = true
 
     /**
      * Call this function to clear focus from the currently focused component, and set the focus to
@@ -484,14 +305,12 @@ class ComposeScene internal constructor(
      */
     @ExperimentalComposeUiApi
     fun releaseFocus() {
-        mainOwner.focusOwner.releaseFocus()
-        isFocused = false
+        TODO()
     }
 
     @ExperimentalComposeUiApi
     fun requestFocus() {
-        mainOwner.focusOwner.takeFocus()
-        isFocused = true
+        TODO()
     }
 
     /**
@@ -503,81 +322,7 @@ class ComposeScene internal constructor(
      * @return true if focus was moved successfully. false if the focused item is unchanged.
      */
     @ExperimentalComposeUiApi
-    fun moveFocus(focusDirection: FocusDirection): Boolean =
-        mainOwner.focusOwner.moveFocus(focusDirection)
-
-    /**
-     * Represents pointer such as mouse cursor, or touch/stylus press.
-     * There can be multiple pointers on the screen at the same time.
-     */
-    @ExperimentalComposeUiApi
-    class Pointer(
-        /**
-         * Unique id associated with the pointer. Used to distinguish between multiple pointers that can exist
-         * at the same time (i.e. multiple pressed touches).
-         */
-        val id: PointerId,
-
-        /**
-         * The [Offset] of the pointer.
-         */
-        val position: Offset,
-
-        /**
-         * `true` if the pointer event is considered "pressed". For example,
-         * a finger touches the screen or any mouse button is pressed.
-         *  During the up event, pointer is considered not pressed.
-         */
-        val pressed: Boolean,
-
-        /**
-         * The device type associated with the pointer, such as [mouse][PointerType.Mouse],
-         * or [touch][PointerType.Touch].
-         */
-        val type: PointerType = PointerType.Mouse,
-
-        /**
-         * Pressure of the pointer. 0.0 - no pressure, 1.0 - average pressure
-         */
-        val pressure: Float = 1.0f,
-
-        /**
-         * High-frequency pointer moves in between the current event and the last event.
-         * can be used for extra accuracy when touchscreen rate exceeds framerate.
-         *
-         * Can be empty, if a platform doesn't provide any.
-         *
-         * For example, on iOS this list is populated using the data of.
-         * https://developer.apple.com/documentation/uikit/uievent/1613808-coalescedtouchesfortouch?language=objc
-         */
-        val historical: List<HistoricalChange> = emptyList()
-    ) {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (other == null || this::class != other::class) return false
-
-            other as Pointer
-
-            if (position != other.position) return false
-            if (pressed != other.pressed) return false
-            if (type != other.type) return false
-            if (id != other.id) return false
-            if (pressure != other.pressure) return false
-
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = position.hashCode()
-            result = 31 * result + pressed.hashCode()
-            result = 31 * result + type.hashCode()
-            result = 31 * result + id.hashCode()
-            result = 31 * result + pressure.hashCode()
-            return result
-        }
-
-        override fun toString(): String {
-            return "Pointer(position=$position, pressed=$pressed, type=$type, id=$id, pressure=$pressure)"
-        }
+    fun moveFocus(focusDirection: FocusDirection): Boolean {
+        TODO()
     }
 }
