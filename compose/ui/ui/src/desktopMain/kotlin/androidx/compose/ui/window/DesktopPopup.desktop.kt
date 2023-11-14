@@ -34,15 +34,6 @@ import androidx.compose.ui.unit.round
 import kotlin.math.roundToInt
 
 /**
- * Returns a remembered value of the mouse cursor position or null if cursor is not inside a scene.
- */
-@Composable
-private fun rememberCursorPosition(): Offset? {
-    val scene = LocalComposeScene.requireCurrent()
-    return remember { scene.pointerPositions.values.firstOrNull() }
-}
-
-/**
  * Provides [PopupPositionProvider] relative to the current mouse cursor position.
  *
  * @param offset [DpOffset] to be added to the position of the popup.
@@ -62,8 +53,8 @@ fun rememberCursorPositionProvider(
     val windowMarginPx = with(LocalDensity.current) {
         windowMargin.roundToPx()
     }
-    val cursorPosition = rememberCursorPosition()
-
+    val scene = LocalComposeScene.requireCurrent()
+    val cursorPosition = remember { scene.lastKnownCursorPosition }
     if (cursorPosition == null) {
         // if cursor is outside the scene, show popup under the parent component
         return rememberComponentRectPositionProvider(

@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.Owner
 import androidx.compose.ui.window.RootNodeOwner
 
 /**
@@ -41,8 +42,8 @@ internal fun RootNodeOwner.setContent(
     getCompositionLocalContext: () -> CompositionLocalContext? = { null },
     content: @Composable () -> Unit
 ): Composition {
-    val composition = Composition(DefaultUiApplier(root), parent)
-    val owner = this
+    val composition = createComposition(parent)
+    val owner = this as Owner
     composition.setContent {
         getCompositionLocalContext().provide {
             ProvideCommonCompositionLocals(
@@ -50,7 +51,8 @@ internal fun RootNodeOwner.setContent(
                 uriHandler = remember { PlatformUriHandler() },
                 content = content
             )
-            LaunchedEffect(owner) { accessibilityController.syncLoop() }
+            // TODO
+//            LaunchedEffect(owner) { accessibilityController.syncLoop() }
         }
     }
     return composition

@@ -63,12 +63,16 @@ internal class ComposeSceneAccessible(
     private class ComposeSceneAccessibleContext(
         private val scene: ComposeScene
     ) : AccessibleContext(), AccessibleComponent {
-        private val accessibilityControllers
-            get() = scene.mainOwner?.accessibilityControllers
-                ?.filterIsInstance<AccessibilityControllerImpl>() ?: emptyList()
+        private val accessibilityControllers: List<AccessibilityControllerImpl>
+            get() =
+                // TODO
+                // scene.mainOwner?.accessibilityControllers?.filterIsInstance<AccessibilityControllerImpl>() ?:
+            emptyList()
 
-        private val accessibilityController
-            get() = scene.mainOwner?.accessibilityController as? AccessibilityControllerImpl
+        private val accessibilityController: AccessibilityControllerImpl?
+            get() = null
+        // TODO
+        //scene.mainOwner?.accessibilityController as? AccessibilityControllerImpl
 
 
         private fun getMainOwnerAccessibleRoot(): ComposeAccessible? {

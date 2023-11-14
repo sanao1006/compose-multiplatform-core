@@ -31,7 +31,6 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.CombinedRootNodeOwner
 import androidx.compose.ui.window.RootNodeOwner
 import kotlin.coroutines.CoroutineContext
 import kotlin.jvm.Volatile
@@ -39,7 +38,6 @@ import kotlinx.coroutines.*
 import org.jetbrains.skia.Canvas as SkCanvas
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.node.SnapshotInvalidationTracker
-import androidx.compose.ui.window.RootNodeOwnerImpl
 
 internal val LocalComposeScene = staticCompositionLocalOf<ComposeScene?> { null }
 
@@ -217,6 +215,11 @@ class ComposeScene internal constructor(
     val semanticsOwner: SemanticsOwner
         get() = requireNotNull(mainOwner).semanticsOwner
 
+    /**
+     * The mouse cursor position or null if cursor is not inside a scene.
+     */
+    internal val lastKnownCursorPosition: Offset?
+        get() = inputHandler.lastKnownCursorPosition
 
     private val job = Job()
     private val coroutineScope = CoroutineScope(coroutineContext + job)
@@ -301,20 +304,20 @@ class ComposeScene internal constructor(
         focusable: Boolean,
         onOutsidePointerEvent: ((PointerInputEvent) -> Unit)? = null,
     ) {
-        (mainOwner as CombinedRootNodeOwner?)?.attach(owner)
-        if (isFocused) {
-            owner.focusOwner.takeFocus()
-        } else {
-            owner.focusOwner.releaseFocus()
-        }
-        inputHandler.onPointerUpdate()
-        invalidateIfNeeded()
+//        (mainOwner as CombinedRootNodeOwner?)?.attach(owner)
+//        if (isFocused) {
+//            owner.focusOwner.takeFocus()
+//        } else {
+//            owner.focusOwner.releaseFocus()
+//        }
+//        inputHandler.onPointerUpdate()
+//        invalidateIfNeeded()
     }
 
     internal fun detach(owner: RootNodeOwner) {
-        (mainOwner as CombinedRootNodeOwner?)?.detach(owner)
-        inputHandler.onPointerUpdate()
-        invalidateIfNeeded()
+//        (mainOwner as CombinedRootNodeOwner?)?.detach(owner)
+//        inputHandler.onPointerUpdate()
+//        invalidateIfNeeded()
     }
 
     /**
@@ -386,7 +389,7 @@ class ComposeScene internal constructor(
     }
 
     private fun createMainLayer(modifier: Modifier): RootNodeOwner {
-        val owner = CombinedRootNodeOwner(
+        val owner = RootNodeOwner(
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
             platform = platform,
@@ -394,9 +397,9 @@ class ComposeScene internal constructor(
             layoutDirection = layoutDirection,
             coroutineContext = recomposer.effectCoroutineContext,
             constraints = constraints,
-            modifier = modifier
         )
         owner.initialize()
+        owner.setRootModifier(modifier)
         if (isFocused) {
             owner.focusOwner.takeFocus()
         } else {
@@ -412,7 +415,7 @@ class ComposeScene internal constructor(
         coroutineContext: CoroutineContext,
         modifier: Modifier
     ): RootNodeOwner {
-        val owner = RootNodeOwnerImpl(
+        val owner = RootNodeOwner(
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
             platform = platform,
@@ -420,9 +423,9 @@ class ComposeScene internal constructor(
             layoutDirection = layoutDirection,
             coroutineContext = coroutineContext,
             constraints = constraints,
-            modifier = modifier
         )
         owner.initialize()
+        owner.setRootModifier(modifier)
 
         return owner
     }
