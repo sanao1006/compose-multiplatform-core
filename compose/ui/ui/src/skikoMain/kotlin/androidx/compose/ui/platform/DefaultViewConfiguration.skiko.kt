@@ -21,17 +21,15 @@ import androidx.compose.ui.unit.dp
 
 @Deprecated("Used only for tests. In application code, use LocalViewConfiguration.current instead")
 class DefaultViewConfiguration(private val density: Density) : ViewConfiguration {
-    private val emptyViewConfiguration = Platform.Empty.viewConfiguration
-
     override val longPressTimeoutMillis: Long
-        get() = emptyViewConfiguration.longPressTimeoutMillis
+        get() = EmptyViewConfiguration.longPressTimeoutMillis
 
     override val doubleTapTimeoutMillis: Long
-        get() = emptyViewConfiguration.doubleTapTimeoutMillis
+        get() = EmptyViewConfiguration.doubleTapTimeoutMillis
 
     override val doubleTapMinTimeMillis: Long
-        get() = emptyViewConfiguration.doubleTapMinTimeMillis
+        get() = EmptyViewConfiguration.doubleTapMinTimeMillis
 
     override val touchSlop: Float
-        get() = with(density) { emptyViewConfiguration.touchSlop.dp.toPx() }
+        get() = with(density) { EmptyViewConfiguration.touchSlop.dp.toPx() }
 }

@@ -79,19 +79,4 @@ interface SkiaRootForTest : RootForTest {
         nativeEvent: Any? = null,
         button: PointerButton? = null,
     )
-
-    companion object {
-        /**
-         * Called after an owner implementing [SkiaRootForTest] is created. Used by
-         * SkikoComposeUiTest to keep track of all attached roots. Not to be
-         * set or used by any other component.
-         */
-        // TODO: Move to "Shared Context" (aka Platform now)
-        @InternalComposeUiApi
-        var onRootCreatedCallback: ((SkiaRootForTest) -> Unit)? = null
-
-        // TODO: Move to "Shared Context" (aka Platform now)
-        @InternalComposeUiApi
-        var onRootDisposedCallback: ((SkiaRootForTest) -> Unit)? = null
-    }
 }

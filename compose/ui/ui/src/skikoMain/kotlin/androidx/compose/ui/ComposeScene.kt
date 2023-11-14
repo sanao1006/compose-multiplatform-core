@@ -57,15 +57,16 @@ internal fun CompositionLocal<ComposeScene?>.requireCurrent(): ComposeScene {
  * To specify available size for the content, you should use [constraints].
  *
  * After [ComposeScene] will no longer needed, you should call [close] method, so all resources
- * and subscriptions will be properly closed. Otherwise there can be a memory leak.
+ * and subscriptions will be properly closed. Otherwise, there can be a memory leak.
  *
  * [ComposeScene] doesn't support concurrent read/write access from different threads. Except:
  * - [hasInvalidations] can be called from any thread
  * - [invalidate] callback can be called from any thread
  */
+@OptIn(InternalComposeUiApi::class)
 class ComposeScene internal constructor(
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
-    internal val platform: Platform,
+    private val context: ComposeSceneContext,
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
     private val invalidate: () -> Unit = {}
@@ -78,7 +79,7 @@ class ComposeScene internal constructor(
      * @param density Initial density of the content which will be used to convert [dp] units.
      * @param layoutDirection Initial layout direction of the content.
      * @param invalidate Callback which will be called when the content need to be recomposed or
-     * rerendered. If you draw your content using [render] method, in this callback you should
+     * re-rendered. If you draw your content using [render] method, in this callback you should
      * schedule the next [render] in your rendering loop.
      */
     @ExperimentalComposeUiApi
@@ -89,7 +90,10 @@ class ComposeScene internal constructor(
         invalidate: () -> Unit = {}
     ) : this(
         coroutineContext,
-        Platform.Empty,
+        object : ComposeSceneContext {
+            @InternalComposeUiApi
+            override val platformContext = EmptyPlatformContext()
+        },
         density,
         layoutDirection,
         invalidate
@@ -104,7 +108,7 @@ class ComposeScene internal constructor(
      * @param density Initial density of the content which will be used to convert [dp] units.
      * @param layoutDirection Initial layout direction of the content.
      * @param invalidate Callback which will be called when the content need to be recomposed or
-     * rerendered. If you draw your content using [render] method, in this callback you should
+     * re-rendered. If you draw your content using [render] method, in this callback you should
      * schedule the next [render] in your rendering loop.
      */
     @ExperimentalComposeUiApi
@@ -116,8 +120,11 @@ class ComposeScene internal constructor(
         invalidate: () -> Unit = {}
     ) : this(
         coroutineContext,
-        object : Platform by Platform.Empty {
-            override val textInputService: PlatformTextInputService get() = textInputService
+        object : ComposeSceneContext {
+            @InternalComposeUiApi
+            override val platformContext = EmptyPlatformContext(
+                textInputService = textInputService
+            )
         },
         density,
         layoutDirection,
@@ -131,7 +138,7 @@ class ComposeScene internal constructor(
      * [rememberCoroutineScope]) and run recompositions.
      * @param density Initial density of the content which will be used to convert [dp] units.
      * @param invalidate Callback which will be called when the content need to be recomposed or
-     * rerendered. If you draw your content using [render] method, in this callback you should
+     * re-rendered. If you draw your content using [render] method, in this callback you should
      * schedule the next [render] in your rendering loop.
      */
     constructor(
@@ -153,7 +160,7 @@ class ComposeScene internal constructor(
      * [rememberCoroutineScope]) and run recompositions.
      * @param density Initial density of the content which will be used to convert [dp] units.
      * @param invalidate Callback which will be called when the content need to be recomposed or
-     * rerendered. If you draw your content using [render] method, in this callback you should
+     * re-rendered. If you draw your content using [render] method, in this callback you should
      * schedule the next [render] in your rendering loop.
      */
     constructor(
@@ -170,6 +177,11 @@ class ComposeScene internal constructor(
     )
 
     private val snapshotInvalidationTracker = SnapshotInvalidationTracker(::invalidateIfNeeded)
+    private val frameClock = BroadcastFrameClock(onNewAwaiters = ::invalidateIfNeeded)
+    private val recomposer: ComposeSceneRecomposer =
+        ComposeSceneRecomposer(coroutineContext, frameClock)
+    private val inputHandler: ComposeSceneInputHandler =
+        ComposeSceneInputHandler(::processPointerInputEvent, ::processKeyEvent)
 
     private var isInvalidationDisabled = false
     private inline fun <T> postponeInvalidation(crossinline block: () -> T): T {
@@ -199,6 +211,7 @@ class ComposeScene internal constructor(
         }
     }
 
+    @Suppress("unused")
     @Deprecated(
         message = "The scene isn't tracking list of roots anymore",
         level = DeprecationLevel.ERROR,
@@ -213,23 +226,13 @@ class ComposeScene internal constructor(
      */
     @ExperimentalComposeUiApi
     val semanticsOwner: SemanticsOwner
-        get() = requireNotNull(mainOwner).semanticsOwner
+        get() = mainOwner.semanticsOwner
 
     /**
      * The mouse cursor position or null if cursor is not inside a scene.
      */
     internal val lastKnownCursorPosition: Offset?
         get() = inputHandler.lastKnownCursorPosition
-
-    private val frameClock = BroadcastFrameClock(onNewAwaiters = ::invalidateIfNeeded)
-    private val recomposer = ComposeSceneRecomposer(coroutineContext, frameClock)
-    private val inputHandler = ComposeSceneInputHandler(
-        processPointerInputEvent = { mainOwner?.onPointerInput(it) },
-        processKeyEvent = { mainOwner?.onKeyEvent(it) == true }
-    )
-
-    internal var mainOwner: RootNodeOwner? = null
-    private var composition: Composition? = null
 
     /**
      * Density of the content which will be used to convert [dp] units.
@@ -238,7 +241,7 @@ class ComposeScene internal constructor(
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner?.density = value
+            mainOwner.density = value
         }
 
     /**
@@ -249,8 +252,41 @@ class ComposeScene internal constructor(
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner?.layoutDirection = value
+            mainOwner.layoutDirection = value
         }
+
+    /**
+     * Constraints used to measure and layout content.
+     */
+    override var constraints: Constraints = Constraints()
+        set(value) {
+            field = value
+            mainOwner.constraints = constraints
+        }
+
+    /**
+     * Returns the current content size
+     */
+    override val contentSize: IntSize
+        get() {
+            check(!isClosed) { "ComposeScene is closed" }
+            measureAndLayout()
+            return mainOwner.contentSize
+        }
+
+    private val mainOwner by lazy {
+        RootNodeOwner(
+            density = density,
+            layoutDirection = layoutDirection,
+            coroutineContext = recomposer.compositionContext.effectCoroutineContext,
+            constraints = constraints,
+            platformContext = context.platformContext,
+            snapshotInvalidationTracker = snapshotInvalidationTracker,
+            inputHandler = inputHandler,
+        )
+    }
+    private var composition: Composition? = null
+
 
     private var isClosed = false
 
@@ -270,7 +306,7 @@ class ComposeScene internal constructor(
     fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         composition?.dispose()
-        mainOwner?.dispose()
+        mainOwner.dispose()
         recomposer.cancel()
         isClosed = true
     }
@@ -280,28 +316,6 @@ class ComposeScene internal constructor(
      * Can be called from any thread.
      */
     override fun hasInvalidations() = hasPendingDraws || recomposer.hasPendingWork
-
-
-    internal fun attach(
-        owner: RootNodeOwner,
-        focusable: Boolean,
-        onOutsidePointerEvent: ((PointerInputEvent) -> Unit)? = null,
-    ) {
-//        (mainOwner as CombinedRootNodeOwner?)?.attach(owner)
-//        if (isFocused) {
-//            owner.focusOwner.takeFocus()
-//        } else {
-//            owner.focusOwner.releaseFocus()
-//        }
-//        inputHandler.onPointerUpdate()
-//        invalidateIfNeeded()
-    }
-
-    internal fun detach(owner: RootNodeOwner) {
-//        (mainOwner as CombinedRootNodeOwner?)?.detach(owner)
-//        inputHandler.onPointerUpdate()
-//        invalidateIfNeeded()
-    }
 
     /**
      * Top-level composition locals, which will be provided for the Composable content, which is set by [setContent].
@@ -348,13 +362,19 @@ class ComposeScene internal constructor(
         check(!isClosed) { "ComposeScene is closed" }
         inputHandler.onChangeContent()
         composition?.dispose()
-        mainOwner?.dispose()
 
-        val mainOwner = createMainLayer(
-            KeyInputElement(onKeyEvent = onKeyEvent, onPreKeyEvent = onPreviewKeyEvent)
-        )
+        this.mainOwner.setRootModifier(KeyInputElement(
+            onKeyEvent = onKeyEvent,
+            onPreKeyEvent = onPreviewKeyEvent
+        ))
+        if (isFocused) {
+            this.mainOwner.focusOwner.takeFocus()
+        } else {
+            this.mainOwner.focusOwner.releaseFocus()
+        }
 
-        this.mainOwner = mainOwner
+        inputHandler.onPointerUpdate()
+        invalidateIfNeeded()
 
         // setContent might spawn more owners, so this.mainOwner should be set before that.
         composition = mainOwner.setContent(
@@ -371,70 +391,8 @@ class ComposeScene internal constructor(
         recomposer.flush()
     }
 
-    private fun createMainLayer(modifier: Modifier): RootNodeOwner {
-        val owner = RootNodeOwner(
-            snapshotInvalidationTracker = snapshotInvalidationTracker,
-            inputHandler = inputHandler,
-            platform = platform,
-            density = density,
-            layoutDirection = layoutDirection,
-            coroutineContext = recomposer.effectCoroutineContext,
-            constraints = constraints,
-        )
-        owner.initialize()
-        owner.setRootModifier(modifier)
-        if (isFocused) {
-            owner.focusOwner.takeFocus()
-        } else {
-            owner.focusOwner.releaseFocus()
-        }
-        inputHandler.onPointerUpdate()
-        invalidateIfNeeded()
-
-        return owner
-    }
-
-    internal fun createAttachedLayer(
-        coroutineContext: CoroutineContext,
-        modifier: Modifier
-    ): RootNodeOwner {
-        val owner = RootNodeOwner(
-            snapshotInvalidationTracker = snapshotInvalidationTracker,
-            inputHandler = inputHandler,
-            platform = platform,
-            density = density,
-            layoutDirection = layoutDirection,
-            coroutineContext = coroutineContext,
-            constraints = constraints,
-        )
-        owner.initialize()
-        owner.setRootModifier(modifier)
-
-        return owner
-    }
-
-    /**
-     * Constraints used to measure and layout content.
-     */
-    override var constraints: Constraints = Constraints()
-        set(value) {
-            field = value
-            mainOwner?.constraints = constraints
-        }
-
-    /**
-     * Returns the current content size
-     */
-    override val contentSize: IntSize
-        get() {
-            check(!isClosed) { "ComposeScene is closed" }
-            val mainOwner = mainOwner ?: return IntSize.Zero
-            measureAndLayout()
-            return mainOwner.contentSize
-        }
-
     internal fun hitTestInteropView(position: Offset): Boolean =
-        mainOwner?.hitTestInteropView(position) ?: false
+        mainOwner.hitTestInteropView(position)
 
     /**
      * Render the current content on [canvas]. Passed [nanoTime] will be used to drive all
@@ -501,15 +459,21 @@ class ComposeScene internal constructor(
         inputHandler.onKeyEvent(keyEvent)
     }
 
+    private fun processPointerInputEvent(event: PointerInputEvent) =
+        mainOwner.onPointerInput(event)
+
+    private fun processKeyEvent(keyEvent: KeyEvent): Boolean =
+        mainOwner.onKeyEvent(keyEvent)
+
     private fun measureAndLayout() {
         snapshotInvalidationTracker.onLayout()
-        mainOwner?.measureAndLayout()
+        mainOwner.measureAndLayout()
         inputHandler.onLayout()
     }
 
     private fun draw(canvas: Canvas) {
         snapshotInvalidationTracker.onDraw()
-        mainOwner?.draw(canvas)
+        mainOwner.draw(canvas)
     }
 
     private var isFocused = true
@@ -520,13 +484,13 @@ class ComposeScene internal constructor(
      */
     @ExperimentalComposeUiApi
     fun releaseFocus() {
-        mainOwner?.focusOwner?.releaseFocus()
+        mainOwner.focusOwner.releaseFocus()
         isFocused = false
     }
 
     @ExperimentalComposeUiApi
     fun requestFocus() {
-        mainOwner?.focusOwner?.takeFocus()
+        mainOwner.focusOwner.takeFocus()
         isFocused = true
     }
 
@@ -540,7 +504,7 @@ class ComposeScene internal constructor(
      */
     @ExperimentalComposeUiApi
     fun moveFocus(focusDirection: FocusDirection): Boolean =
-        mainOwner?.focusOwner?.moveFocus(focusDirection) ?: false
+        mainOwner.focusOwner.moveFocus(focusDirection)
 
     /**
      * Represents pointer such as mouse cursor, or touch/stylus press.

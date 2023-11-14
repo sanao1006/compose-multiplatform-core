@@ -67,8 +67,8 @@ import androidx.compose.ui.node.SnapshotInvalidationTracker
 import androidx.compose.ui.platform.DefaultAccessibilityManager
 import androidx.compose.ui.platform.DefaultHapticFeedback
 import androidx.compose.ui.platform.DefaultUiApplier
-import androidx.compose.ui.platform.Platform
 import androidx.compose.ui.platform.PlatformClipboardManager
+import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.RenderNodeLayer
 import androidx.compose.ui.platform.SkiaRootForTest
 import androidx.compose.ui.platform.WindowInfo
@@ -107,7 +107,6 @@ internal interface RootNodeOwner {
     fun onPointerInput(event: PointerInputEvent)
     fun onKeyEvent(keyEvent: KeyEvent): Boolean
 
-    fun initialize()
     fun dispose()
 
     fun measureAndLayout()
@@ -117,22 +116,23 @@ internal interface RootNodeOwner {
     fun createComposition(parent: CompositionContext): Composition
 }
 
+@OptIn(InternalComposeUiApi::class)
 internal fun RootNodeOwner(
+    density: Density,
+    layoutDirection: LayoutDirection,
+    coroutineContext: CoroutineContext,
+    constraints: Constraints,
+    platformContext: PlatformContext,
     snapshotInvalidationTracker: SnapshotInvalidationTracker,
     inputHandler: ComposeSceneInputHandler,
-    platform: Platform,
-    density: Density,
-    coroutineContext: CoroutineContext,
-    layoutDirection: LayoutDirection,
-    constraints: Constraints,
 ) : RootNodeOwner = RootNodeOwnerImpl(
-    snapshotInvalidationTracker = snapshotInvalidationTracker,
-    inputHandler = inputHandler,
-    platform = platform,
     density = density,
     layoutDirection = layoutDirection,
     coroutineContext = coroutineContext,
-    constraints = constraints
+    constraints = constraints,
+    platformContext = platformContext,
+    snapshotInvalidationTracker = snapshotInvalidationTracker,
+    inputHandler = inputHandler
 )
 
 @OptIn(
@@ -142,17 +142,16 @@ internal fun RootNodeOwner(
     InternalComposeUiApi::class
 )
 private class RootNodeOwnerImpl(
-    private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
-    private val inputHandler: ComposeSceneInputHandler,
-
-    private val platform: Platform,
     density: Density,
     layoutDirection: LayoutDirection,
     override val coroutineContext: CoroutineContext,
     override var constraints: Constraints,
+    private val platformContext: PlatformContext,
+    private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
+    private val inputHandler: ComposeSceneInputHandler,
 ) : Owner, RootNodeOwner, SkiaRootForTest {
     override val windowInfo: WindowInfo
-        get() = platform.windowInfo
+        get() = platformContext.windowInfo
 
     override var bounds by mutableStateOf(constraints.maxSize.toIntRect())
 
@@ -179,7 +178,7 @@ private class RootNodeOwnerImpl(
     }
 
     override val inputModeManager: InputModeManager
-        get() = platform.inputModeManager
+        get() = platformContext.inputContext.inputModeManager
 
     override val modifierLocalManager = ModifierLocalManager(this)
 
@@ -211,7 +210,9 @@ private class RootNodeOwnerImpl(
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
     private val endApplyChangesListeners = mutableVectorOf<(() -> Unit)?>()
 
-    override val textInputService = TextInputService(platform.textInputService)
+    override val textInputService = TextInputService(
+        platformTextInputService = platformContext.inputContext.textInputService
+    )
 
     @Suppress("UNUSED_ANONYMOUS_PARAMETER")
     @OptIn(InternalTextApi::class)
@@ -235,12 +236,9 @@ private class RootNodeOwnerImpl(
     override val accessibilityManager = DefaultAccessibilityManager()
 
     override val textToolbar
-        get() = platform.textToolbar
+        get() = platformContext.inputContext.textToolbar
 
     override val semanticsOwner: SemanticsOwner = SemanticsOwner(root)
-
-    // TODO: Move out of here
-    val accessibilityController = platform.accessibilityController(semanticsOwner)
 
     override val autofillTree = AutofillTree()
 
@@ -248,7 +246,7 @@ private class RootNodeOwnerImpl(
         get() = null
 
     override val viewConfiguration
-        get() = platform.viewConfiguration
+        get() = platformContext.inputContext.viewConfiguration
 
 
     override val containerSize: IntSize
@@ -259,25 +257,23 @@ private class RootNodeOwnerImpl(
     override val hasPendingMeasureOrLayout: Boolean
         get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout
 
-    override fun initialize() {
+    init {
         snapshotObserver.startObserving()
         root.attach(this)
-
-        // TODO: Move to SharedContext
-        SkiaRootForTest.onRootCreatedCallback?.invoke(rootForTest as SkiaRootForTest)
+        platformContext.accessibilityListener?.onSemanticsOwnerCreated(semanticsOwner)
+        platformContext.rootForTestListener?.onRootForTestCreated(rootForTest)
     }
 
     override fun dispose() {
-        // TODO: Move to SharedContext
-        SkiaRootForTest.onRootDisposedCallback?.invoke(rootForTest as SkiaRootForTest)
-
+        platformContext.rootForTestListener?.onRootForTestDisposed(rootForTest)
+        platformContext.accessibilityListener?.onSemanticsOwnerDisposed(semanticsOwner)
         snapshotObserver.stopObserving()
         // we don't need to call root.detach() because root will be garbage collected
     }
 
     override var showLayoutBounds = false
 
-    override fun requestFocus() = platform.requestFocusForOwner()
+    override fun requestFocus() = platformContext.requestFocus()
 
     override fun onAttach(node: LayoutNode) = Unit
 
@@ -385,11 +381,11 @@ private class RootNodeOwnerImpl(
     )
 
     override fun onSemanticsChange() {
-        accessibilityController.onSemanticsChange()
+        platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
     }
 
     override fun onLayoutChange(layoutNode: LayoutNode) {
-        accessibilityController.onLayoutChange(layoutNode)
+        platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
     }
 
     override fun getFocusDirection(keyEvent: KeyEvent): FocusDirection? {
@@ -552,7 +548,7 @@ private class RootNodeOwnerImpl(
 
         override fun setIcon(value: PointerIcon?) {
             desiredPointerIcon = value
-            platform.setPointerIcon(desiredPointerIcon ?: PointerIcon.Default)
+            platformContext.inputContext.setPointerIcon(desiredPointerIcon ?: PointerIcon.Default)
         }
     }
 }
