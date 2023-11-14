@@ -17,6 +17,7 @@
 package androidx.compose.ui.scene
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocal
 import androidx.compose.runtime.CompositionLocalContext
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +33,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.OwnedLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.semantics.SemanticsNode
@@ -44,6 +46,18 @@ import androidx.compose.ui.unit.dp
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skiko.currentNanoTime
+
+@OptIn(InternalComposeUiApi::class)
+internal val LocalComposeScene = staticCompositionLocalOf<ComposeScene?> { null }
+
+/**
+ * The local [ComposeScene] is typically not-null. This extension can be used in these cases.
+ */
+@OptIn(InternalComposeUiApi::class)
+@Composable
+internal fun CompositionLocal<ComposeScene?>.requireCurrent(): ComposeScene {
+    return current ?: error("CompositionLocal LocalComposeScene not provided")
+}
 
 /**
  * A virtual container that encapsulates Compose UI content. UI content can be constructed via
@@ -191,6 +205,12 @@ interface ComposeScene {
      * @return true if the event was consumed by the content
      */
     fun sendKeyEvent(keyEvent: KeyEvent): Boolean
+
+    fun createLayer(
+        density: Density,
+        layoutDirection: LayoutDirection,
+        compositionContext: CompositionContext,
+    ): ComposeSceneLayer
 }
 
 private fun currentTimeForEvent(): Long =

@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.PlatformInsets
 import androidx.compose.ui.platform.PlatformInsetsConfig
 import androidx.compose.ui.platform.ZeroInsetsConfig
+import androidx.compose.ui.scene.rememberComposeSceneLayer
 import androidx.compose.ui.semantics.popup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -388,27 +389,27 @@ fun Popup(
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
     content: @Composable () -> Unit
 ) {
-    var modifier = Modifier.semantics { popup() }
-    if (properties.dismissOnBackPress && onDismissRequest != null) {
-        modifier = modifier.onKeyEvent { event: KeyEvent ->
-            if (event.isDismissRequest()) {
-                onDismissRequest()
-                true
-            } else {
-                false
-            }
-        }
-    }
-    if (onPreviewKeyEvent != null || onKeyEvent != null) {
-        modifier = modifier.then(
-            KeyInputElement(
-                onKeyEvent = onKeyEvent,
-                onPreKeyEvent = onPreviewKeyEvent
-            )
-        )
-    }
+    // TODO
+//    if (properties.dismissOnBackPress && onDismissRequest != null) {
+//        modifier = modifier.onKeyEvent { event: KeyEvent ->
+//            if (event.isDismissRequest()) {
+//                onDismissRequest()
+//                true
+//            } else {
+//                false
+//            }
+//        }
+//    }
+//    if (onPreviewKeyEvent != null || onKeyEvent != null) {
+//        modifier = modifier.then(
+//            KeyInputElement(
+//                onKeyEvent = onKeyEvent,
+//                onPreKeyEvent = onPreviewKeyEvent
+//            )
+//        )
+//    }
     val onOutsidePointerEvent = if (properties.dismissOnClickOutside && onDismissRequest != null) {
-        { _: PointerInputEvent ->
+        { _: Boolean ->
             onDismissRequest()
         }
     } else {
@@ -417,9 +418,11 @@ fun Popup(
     PopupLayout(
         popupPositionProvider = popupPositionProvider,
         properties = properties,
-        modifier = modifier,
+        modifier = Modifier.semantics { popup() },
+        onPreviewKeyEvent = onPreviewKeyEvent,
+        onKeyEvent = onKeyEvent,
         onOutsidePointerEvent = onOutsidePointerEvent,
-        content = content
+        content = content,
     )
 }
 
@@ -427,19 +430,21 @@ fun Popup(
 private fun PopupLayout(
     popupPositionProvider: PopupPositionProvider,
     properties: PopupProperties,
-    modifier: Modifier = Modifier,
-    onOutsidePointerEvent: ((PointerInputEvent) -> Unit)? = null,
+    modifier: Modifier,
+    onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null,
+    onKeyEvent: ((KeyEvent) -> Boolean)? = null,
+    onOutsidePointerEvent: ((Boolean) -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val platformInsets = properties.insetsConfig.safeInsets
     var layoutParentBoundsInWindow: IntRect? by remember { mutableStateOf(null) }
     EmptyLayout(Modifier.parentBoundsInWindow { layoutParentBoundsInWindow = it })
-    RootLayout(
-        modifier = modifier,
-        focusable = properties.focusable,
-        onOutsidePointerEvent = onOutsidePointerEvent
-    ) { owner ->
-        val parentBounds = layoutParentBoundsInWindow ?: return@RootLayout
+    val layer = rememberComposeSceneLayer()
+    layer.focusable = properties.focusable // TODO
+    layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
+    layer.setOutsidePointerEventListener(onOutsidePointerEvent)
+    layer.setContent {
+        val parentBounds = layoutParentBoundsInWindow ?: return@setContent
         val layoutDirection = LocalLayoutDirection.current
         val measurePolicy = rememberPopupMeasurePolicy(
             popupPositionProvider = popupPositionProvider,
@@ -448,11 +453,12 @@ private fun PopupLayout(
             layoutDirection = layoutDirection,
             parentBounds = parentBounds
         ) {
-            owner.bounds = it
+            layer.bounds = it
         }
         properties.insetsConfig.excludeSafeInsets {
             Layout(
                 content = content,
+                modifier = modifier,
                 measurePolicy = measurePolicy
             )
         }

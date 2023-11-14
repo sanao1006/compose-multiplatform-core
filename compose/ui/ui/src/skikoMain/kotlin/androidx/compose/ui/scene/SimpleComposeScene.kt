@@ -18,6 +18,7 @@ package androidx.compose.ui.scene
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.CompositionContext
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.key.KeyEvent
@@ -52,7 +53,7 @@ private class SimpleComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
     coroutineContext: CoroutineContext,
-    composeSceneContext: ComposeSceneContext,
+    private val composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
 ) : BaseComposeScene(
     coroutineContext = coroutineContext,
@@ -125,4 +126,14 @@ private class SimpleComposeSceneImpl(
     override fun draw(canvas: Canvas) {
         mainOwner.draw(canvas)
     }
+
+    override fun createLayer(
+        density: Density,
+        layoutDirection: LayoutDirection,
+        compositionContext: CompositionContext,
+    ): ComposeSceneLayer = composeSceneContext.createPlatformLayer(
+        density = density,
+        layoutDirection = layoutDirection,
+        compositionContext = compositionContext
+    )
 }

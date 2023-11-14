@@ -21,12 +21,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCompositionContext
-import androidx.compose.ui.LocalComposeScene
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.requireCurrent
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
@@ -51,6 +51,7 @@ interface ComposeSceneLayer {
     fun dispose()
 }
 
+@OptIn(InternalComposeUiApi::class)
 @Composable
 internal fun rememberComposeSceneLayer(): ComposeSceneLayer {
     val scene = LocalComposeScene.requireCurrent()
