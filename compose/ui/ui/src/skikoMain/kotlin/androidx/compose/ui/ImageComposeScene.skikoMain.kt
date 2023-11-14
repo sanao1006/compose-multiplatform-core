@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
@@ -28,7 +29,8 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.RootForTest
-import androidx.compose.ui.platform.setContent
+import androidx.compose.ui.scene.CombinedComposeScene
+import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
@@ -103,6 +105,7 @@ inline fun <R> ImageComposeScene.use(
  * [rememberCoroutineScope]) and run recompositions.
  * @param content Composable content which needed to be rendered.
  */
+@OptIn(InternalComposeUiApi::class)
 class ImageComposeScene @ExperimentalComposeUiApi constructor(
     width: Int,
     height: Int,
@@ -129,10 +132,10 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
 
     private val surface = Surface.makeRasterN32Premul(width, height)
 
-    private val scene = ComposeScene(
+    private val scene = CombinedComposeScene(
         density = density,
         layoutDirection = layoutDirection,
-        coroutineContext = coroutineContext
+        coroutineContext = coroutineContext,
     ).apply {
         constraints = Constraints(maxWidth = surface.width, maxHeight = surface.height)
         setContent(content = content)
@@ -193,7 +196,8 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
     /**
      * Returns the current content size
      */
-    val contentSize: IntSize get() = scene.contentSize
+    val contentSize: IntSize
+        get() = scene.calculateContentSize()
 
     /**
      * Render the current content into an image. [nanoTime] will be used to drive all
@@ -201,7 +205,7 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      */
     fun render(nanoTime: Long = 0): Image {
         surface.canvas.clear(Color.TRANSPARENT)
-        scene.render(surface.canvas, nanoTime)
+        scene.render(surface.canvas.asComposeCanvas(), nanoTime)
         return surface.makeImageSnapshot()
     }
 
@@ -267,7 +271,7 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
     @ExperimentalComposeUiApi
     fun sendPointerEvent(
         eventType: PointerEventType,
-        pointers: List<ComposeScene.Pointer>,
+        pointers: List<ComposeScenePointer>,
         buttons: PointerButtons = PointerButtons(),
         keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
         scrollDelta: Offset = Offset(0f, 0f),
