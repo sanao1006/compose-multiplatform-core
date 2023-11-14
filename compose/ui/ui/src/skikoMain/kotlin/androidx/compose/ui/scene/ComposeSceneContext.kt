@@ -17,14 +17,11 @@
 package androidx.compose.ui.scene
 
 import androidx.compose.runtime.CompositionContext
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.platform.EmptyPlatformContext
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.window.RootNodeOwner
 
 @InternalComposeUiApi
 interface ComposeSceneContext {

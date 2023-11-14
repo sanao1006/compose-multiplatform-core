@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.window
+package androidx.compose.ui.node
 
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
@@ -54,13 +54,6 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.PositionCalculator
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.modifier.ModifierLocalManager
-import androidx.compose.ui.node.BackwardsCompatNode
-import androidx.compose.ui.node.HitTestResult
-import androidx.compose.ui.node.InternalCoreApi
-import androidx.compose.ui.node.LayoutNode
-import androidx.compose.ui.node.LayoutNodeDrawScope
-import androidx.compose.ui.node.MeasureAndLayoutDelegate
-import androidx.compose.ui.node.Owner
 import androidx.compose.ui.platform.DefaultAccessibilityManager
 import androidx.compose.ui.platform.DefaultHapticFeedback
 import androidx.compose.ui.platform.DefaultUiApplier
@@ -71,7 +64,6 @@ import androidx.compose.ui.platform.RenderNodeLayer
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.scene.ComposeSceneInputHandler
 import androidx.compose.ui.scene.ComposeScenePointer
-import androidx.compose.ui.scene.SnapshotInvalidationTracker
 import androidx.compose.ui.semantics.EmptySemanticsElement
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.ExperimentalTextApi
