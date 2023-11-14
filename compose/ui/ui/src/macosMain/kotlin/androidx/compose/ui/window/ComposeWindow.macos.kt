@@ -17,7 +17,6 @@
 package androidx.compose.ui.window
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.createSkiaLayer
 import androidx.compose.ui.native.ComposeLayer
 import androidx.compose.ui.platform.MacosTextInputService
 import androidx.compose.ui.platform.Platform
@@ -27,6 +26,7 @@ import androidx.compose.ui.unit.IntSize
 import platform.AppKit.*
 import platform.Foundation.*
 import kotlinx.cinterop.*
+import org.jetbrains.skiko.SkiaLayer
 
 internal actual class ComposeWindow actual constructor() {
     private val macosTextInputService = MacosTextInputService()
@@ -38,7 +38,7 @@ internal actual class ComposeWindow actual constructor() {
         override val textInputService = macosTextInputService
     }
     val layer = ComposeLayer(
-        layer = createSkiaLayer(),
+        layer = SkiaLayer(),
         platform = platform,
         input = macosTextInputService.input
     )

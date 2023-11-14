@@ -22,7 +22,6 @@ import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.LocalSystemTheme
-import androidx.compose.ui.createSkiaLayer
 import androidx.compose.ui.input.pointer.BrowserCursor
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.native.ComposeLayer
@@ -39,6 +38,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import org.jetbrains.skiko.SkiaLayer
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLStyleElement
 import org.w3c.dom.HTMLTitleElement
@@ -73,7 +73,7 @@ internal actual class ComposeWindow(val canvasId: String)  {
         }
     }
     private val layer = ComposeLayer(
-        layer = createSkiaLayer(),
+        layer = SkiaLayer(),
         platform = platform,
         input = jsTextInputService.input
     )

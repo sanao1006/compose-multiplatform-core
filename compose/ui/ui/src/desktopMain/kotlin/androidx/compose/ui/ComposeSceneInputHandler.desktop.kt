@@ -19,9 +19,6 @@ package androidx.compose.ui
 import androidx.compose.ui.input.key.NativeKeyEvent
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import java.awt.Toolkit
-import org.jetbrains.skiko.SkiaLayer
-
-internal actual fun createSkiaLayer(): SkiaLayer = SkiaLayer()
 
 private fun getLockingKeyStateSafe(
     mask: Int
