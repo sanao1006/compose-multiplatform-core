@@ -22,7 +22,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.InsetsConfig
 import androidx.compose.ui.platform.PlatformInsets
@@ -165,7 +169,7 @@ private fun DialogLayout(
 ) {
     val platformInsets = properties.insetsConfig.safeInsets
     val layer = rememberComposeSceneLayer()
-    layer.focusable = true // TODO
+    layer.focusable = true
     layer.scrimColor = properties.scrimColor
     layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
     layer.setOutsidePointerEventListener(onOutsidePointerEvent)
@@ -206,3 +210,6 @@ private fun rememberDialogMeasurePolicy(
         position
     }
 }
+
+private fun KeyEvent.isDismissRequest() =
+    type == KeyEventType.KeyDown && key == Key.Escape

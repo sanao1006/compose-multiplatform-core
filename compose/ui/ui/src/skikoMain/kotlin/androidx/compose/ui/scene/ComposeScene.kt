@@ -23,7 +23,6 @@ import androidx.compose.runtime.CompositionLocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -37,18 +36,16 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.LayoutNode
-import androidx.compose.ui.node.OwnedLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skiko.currentNanoTime
 
 @OptIn(InternalComposeUiApi::class)
@@ -84,10 +81,7 @@ interface ComposeScene {
      */
     var layoutDirection: LayoutDirection
 
-    /**
-     * Constraints used to measure and layout content.
-     */
-    var constraints: Constraints
+    var bounds: IntRect
 
     /**
      * Top-level composition locals, which will be provided for the Composable content, which is set by [setContent].
@@ -99,13 +93,7 @@ interface ComposeScene {
     /**
      * The mouse cursor position or null if cursor is not inside a scene.
      */
-    val lastKnownCursorPosition: Offset?
-
-    /**
-     * Semantics owner that owns [SemanticsNode] objects and notifies listeners of changes to the
-     * semantics tree.
-     */
-    val semanticsOwner: SemanticsOwner
+    val lastKnownPointerPosition: Offset?
 
     /**
      * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
@@ -143,11 +131,18 @@ interface ComposeScene {
      */
     fun setContent(content: @Composable () -> Unit)
 
+    fun setKeyEventListener(
+        onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null,
+        onKeyEvent: ((KeyEvent) -> Boolean)? = null,
+    )
+
     /**
      * Render the current content on [canvas]. Passed [nanoTime] will be used to drive all
      * animations in the content (or any other code, which uses [withFrameNanos]
      */
     fun render(canvas: Canvas, nanoTime: Long)
+
+    // TODO: hitTestInteropView
 
     /**
      * Send pointer event to the content.

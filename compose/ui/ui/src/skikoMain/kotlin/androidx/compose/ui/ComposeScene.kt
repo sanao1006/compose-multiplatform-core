@@ -195,7 +195,16 @@ class ComposeScene internal constructor(
     /**
      * Constraints used to measure and layout content.
      */
-    var constraints: Constraints by replacement::constraints
+    var constraints: Constraints
+        get() = with(replacement.bounds) { Constraints(maxWidth = width, maxHeight = height) }
+        set(value) {
+            replacement.bounds = IntRect(
+                IntOffset.Zero, IntSize(
+                    width = value.maxWidth,
+                    height = value.maxHeight
+                )
+            )
+        }
 
     /**
      * Returns the current content size

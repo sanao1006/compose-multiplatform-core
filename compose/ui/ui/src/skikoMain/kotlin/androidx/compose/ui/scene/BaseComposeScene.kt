@@ -90,7 +90,7 @@ internal abstract class BaseComposeScene(
 
     override var compositionLocalContext: CompositionLocalContext? by mutableStateOf(null)
 
-    override val lastKnownCursorPosition by inputHandler::lastKnownCursorPosition
+    override val lastKnownPointerPosition by inputHandler::lastKnownPointerPosition
 
     init {
         GlobalSnapshotManager.ensureStarted()

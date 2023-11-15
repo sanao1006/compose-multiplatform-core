@@ -33,6 +33,8 @@ import androidx.compose.ui.scene.CombinedComposeScene
 import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -170,9 +172,14 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      * Constraints used to measure and layout content.
      */
     var constraints: Constraints
-        get() = scene.constraints
+        get() = with(scene.bounds) { Constraints(maxWidth = width, maxHeight = height) }
         set(value) {
-            scene.constraints = value
+            scene.bounds = IntRect(
+                IntOffset.Zero, IntSize(
+                    width = value.maxWidth,
+                    height = value.maxHeight
+                )
+            )
         }
 
     /**

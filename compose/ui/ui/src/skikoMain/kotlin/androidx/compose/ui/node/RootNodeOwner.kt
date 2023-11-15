@@ -83,24 +83,26 @@ import androidx.compose.ui.unit.toIntRect
 import kotlin.coroutines.CoroutineContext
 
 internal interface RootNodeOwner {
-    var constraints: Constraints
-    val contentSize: IntSize
-
+    var density: Density
+    var layoutDirection: LayoutDirection
     var bounds: IntRect
+
     val platformContext: PlatformContext
 
     val semanticsOwner: SemanticsOwner
     val focusOwner: FocusOwner
 
-    var density: Density
-    var layoutDirection: LayoutDirection
+    fun dispose()
 
     fun hitTestInteropView(position: Offset): Boolean
-
     fun onPointerInput(event: PointerInputEvent)
     fun onKeyEvent(keyEvent: KeyEvent): Boolean
 
-    fun dispose()
+    /**
+     * Provides a way to measure Owner's content in given [constraints]
+     * Draw/pointer and other callbacks won't be called here like in [measureAndLayout] functions
+     */
+    fun measureInConstraints(constraints: Constraints): IntSize
 
     fun measureAndLayout()
     fun draw(canvas: Canvas)
@@ -115,15 +117,15 @@ internal fun RootNodeOwner(
     layoutDirection: LayoutDirection,
     coroutineContext: CoroutineContext,
     platformContext: PlatformContext,
-    constraints: Constraints,
+    bounds: IntRect,
     snapshotInvalidationTracker: SnapshotInvalidationTracker,
     inputHandler: ComposeSceneInputHandler,
 ) : RootNodeOwner = RootNodeOwnerImpl(
     density = density,
     layoutDirection = layoutDirection,
+    bounds = bounds,
     coroutineContext = coroutineContext,
     platformContext = platformContext,
-    constraints = constraints,
     snapshotInvalidationTracker = snapshotInvalidationTracker,
     inputHandler = inputHandler
 )
@@ -137,16 +139,16 @@ internal fun RootNodeOwner(
 private class RootNodeOwnerImpl(
     density: Density,
     layoutDirection: LayoutDirection,
+    bounds: IntRect,
     override val coroutineContext: CoroutineContext,
     override val platformContext: PlatformContext,
-    override var constraints: Constraints,
     private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
     private val inputHandler: ComposeSceneInputHandler,
 ) : Owner, RootNodeOwner, PlatformRootForTest {
     override val windowInfo: WindowInfo
         get() = platformContext.windowInfo
 
-    override var bounds by mutableStateOf(constraints.maxSize.toIntRect())
+    override var bounds by mutableStateOf(bounds)
 
     override var density by mutableStateOf(density)
 
@@ -214,6 +216,7 @@ private class RootNodeOwnerImpl(
             TODO("See https://issuetracker.google.com/267235947")
         }
 
+    @Suppress("DEPRECATION")
     @Deprecated(
         "fontLoader is deprecated, use fontFamilyResolver",
         replaceWith = ReplaceWith("fontFamilyResolver")
@@ -241,11 +244,8 @@ private class RootNodeOwnerImpl(
     override val viewConfiguration
         get() = platformContext.inputContext.viewConfiguration
 
-
     override val containerSize: IntSize
-        // TODO: properly initialize Platform/WindowInfo in tests
-        // get() = platform.windowInfo.containerSize
-        get() = constraints.maxSize
+         get() = windowInfo.containerSize
 
     override val hasPendingMeasureOrLayout: Boolean
         get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout
@@ -283,28 +283,21 @@ private class RootNodeOwnerImpl(
             needClearObservations = false
         }
     }
-    override var contentSize = IntSize.Zero
-        private set
 
-    override fun measureAndLayout(sendPointerUpdate: Boolean) {
-        measureAndLayoutDelegate.updateRootConstraints(constraints)
-        val rootNodeResized = measureAndLayoutDelegate.measureAndLayout {
-            if (sendPointerUpdate) {
-                inputHandler.onPointerUpdate()
-            }
-        }
-        if (rootNodeResized) {
-            snapshotInvalidationTracker.requestDraw()
-        }
-        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
-        contentSize = computeContentSize()
-    }
+    override fun measureInConstraints(constraints: Constraints): IntSize {
+        try {
+            // TODO: is it possible to measure without reassigning root constraints?
+            measureAndLayoutDelegate.updateRootConstraints(constraints)
+            measureAndLayoutDelegate.measureOnly()
 
-    override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
-        measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
-        inputHandler.onPointerUpdate()
-        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
-        contentSize = computeContentSize()
+            // Don't use mainOwner.root.width here, as it strictly coerced by [constraints]
+            return IntSize(
+                root.children.maxOfOrNull { it.outerCoordinator.measuredWidth } ?: 0,
+                root.children.maxOfOrNull { it.outerCoordinator.measuredHeight } ?: 0,
+            )
+        } finally {
+            measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
+        }
     }
 
     override fun measureAndLayout() {
@@ -315,12 +308,24 @@ private class RootNodeOwnerImpl(
         measureAndLayout(sendPointerUpdate = true)
     }
 
+    override fun measureAndLayout(sendPointerUpdate: Boolean) {
+        measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
+        val rootNodeResized = measureAndLayoutDelegate.measureAndLayout {
+            if (sendPointerUpdate) {
+                inputHandler.onPointerUpdate()
+            }
+        }
+        if (rootNodeResized) {
+            snapshotInvalidationTracker.requestDraw()
+        }
+        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+    }
 
-    // Don't use mainOwner.root.width here, as it strictly coerced by [constraints]
-    private fun computeContentSize() = IntSize(
-        root.children.maxOfOrNull { it.outerCoordinator.measuredWidth } ?: 0,
-        root.children.maxOfOrNull { it.outerCoordinator.measuredHeight } ?: 0,
-    )
+    override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
+        measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
+        inputHandler.onPointerUpdate()
+        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+    }
 
     override fun forceMeasureTheSubtree(layoutNode: LayoutNode, affectsLookahead: Boolean) {
         measureAndLayoutDelegate.forceMeasureTheSubtree(layoutNode, affectsLookahead)
@@ -544,8 +549,8 @@ private class RootNodeOwnerImpl(
     }
 }
 
-internal val Constraints.maxSize get() =
-    IntSize(maxWidth, maxHeight)
+internal fun IntRect.toConstraints() =
+    Constraints(maxWidth = width, maxHeight = height)
 
 private object IdentityPositionCalculator: PositionCalculator {
     override fun screenToLocal(positionOnScreen: Offset): Offset = positionOnScreen

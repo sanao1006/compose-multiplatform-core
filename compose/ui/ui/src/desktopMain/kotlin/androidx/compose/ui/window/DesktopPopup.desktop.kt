@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
 private fun rememberCursorPosition(): Offset? {
     val scene = LocalComposeScene.current
     // FIXME: remember here doesn't allow update offset during mouse movement
-    return remember { scene?.lastKnownCursorPosition }
+    return remember { scene?.lastKnownPointerPosition }
 }
 
 /**

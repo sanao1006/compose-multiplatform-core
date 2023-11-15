@@ -18,11 +18,12 @@ package androidx.compose.ui.scene
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCompositionContext
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.platform.LocalDensity
@@ -30,25 +31,56 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 
+@InternalComposeUiApi
 interface ComposeSceneLayer {
+    /**
+     * Density of the content which will be used to convert [dp] units.
+     */
     var density: Density
+
+    /**
+     * The layout direction of the content, provided to the composition via [LocalLayoutDirection].
+     */
     var layoutDirection: LayoutDirection
 
-    var focusable: Boolean
     var bounds: IntRect
+
     var scrimColor: Color?
+
+    var focusable: Boolean
+
+    /**
+     * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
+     * longer needed will cause a memory leak.
+     *
+     * All effects launched via [LaunchedEffect] or [rememberCoroutineScope] will be cancelled
+     * (but not immediately).
+     *
+     * After calling this method, you cannot call any other method of this [ComposeScene].
+     */
+    fun close()
+
+    /**
+     * Update the composition with the content described by the [content] composable. After this
+     * has been called the changes to produce the initial composition has been calculated and
+     * applied to the composition.
+     *
+     * Will throw an [IllegalStateException] if the composition has been disposed.
+     *
+     * @param content Content of the [ComposeScene]
+     */
+    fun setContent(content: @Composable () -> Unit)
 
     fun setKeyEventListener(
         onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null,
         onKeyEvent: ((KeyEvent) -> Boolean)? = null,
     )
+
     fun setOutsidePointerEventListener(
         onOutsidePointerEvent: ((Boolean) -> Unit)? = null,
     )
-
-    fun setContent(content: @Composable () -> Unit)
-    fun dispose()
 }
 
 @OptIn(InternalComposeUiApi::class)
@@ -67,7 +99,7 @@ internal fun rememberComposeSceneLayer(): ComposeSceneLayer {
     }
     DisposableEffect(Unit) {
         onDispose {
-            layer.dispose()
+            layer.close()
         }
     }
     SideEffect {

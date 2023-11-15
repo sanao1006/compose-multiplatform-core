@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyInputElement
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.input.pointer.PointerType
@@ -54,12 +55,14 @@ import kotlinx.coroutines.Dispatchers
 fun CombinedComposeScene(
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+    bounds: IntRect = IntRect.Zero,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
     composeSceneContext: ComposeSceneContext = EmptyComposeSceneContext,
     invalidate: () -> Unit = {},
 ): ComposeScene = CombinedComposeSceneImpl(
     density = density,
     layoutDirection = layoutDirection,
+    bounds = bounds,
     coroutineContext = coroutineContext,
     composeSceneContext = composeSceneContext,
     invalidate = invalidate
@@ -69,6 +72,7 @@ fun CombinedComposeScene(
 private class CombinedComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
+    bounds: IntRect,
     coroutineContext: CoroutineContext,
     private val composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
@@ -90,79 +94,79 @@ private class CombinedComposeSceneImpl(
             mainOwner.layoutDirection = value
         }
 
-    override var constraints: Constraints = Constraints()
+    override var bounds: IntRect = bounds
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner.constraints = constraints
+            mainOwner.bounds = bounds
         }
-
-    override val semanticsOwner: SemanticsOwner
-        get() = mainOwner.semanticsOwner
 
     private val mainOwner = RootNodeOwner(
         density = density,
         layoutDirection = layoutDirection,
+        bounds = bounds,
         coroutineContext = compositionContext.effectCoroutineContext,
-        constraints = constraints,
         platformContext = composeSceneContext.platformContext,
         snapshotInvalidationTracker = snapshotInvalidationTracker,
         inputHandler = inputHandler,
     )
 
-    private val attachedLayers = mutableListOf<AttachedComposeSceneLayer>()
+    private val layers = mutableListOf<AttachedComposeSceneLayer>()
     private var isFocused = false
 
-    /**
-     * Contains all registered [RootNodeOwner] (main frame, popups, etc.) in order of registration.
-     * So that Popup opened from main owner will have bigger index.
-     * This logic is used by accessibility.
-     */
-    private val owners = mutableListOf(mainOwner)
-
-    // Cache to reduce allocations
-    private val _ownersCopyCache = mutableListOf<RootNodeOwner>()
-    private inline fun withOwnersCopy(
-        block: (List<RootNodeOwner>) -> Unit
-    ) {
-        // In case of recursive calls, allocate new list
-        val copy = if (_ownersCopyCache.isEmpty()) _ownersCopyCache else mutableListOf()
-        copy.addAll(owners)
-        try {
-            block(copy)
-        } finally {
-            copy.clear()
+    private val _layersCopyCache = CopiedList {
+        it.add(null)
+        for (layer in layers) {
+            it.add(layer)
+        }
+    }
+    private val _ownersCopyCache = CopiedList {
+        it.add(mainOwner)
+        for (layer in layers) {
+            it.add(layer.owner)
         }
     }
 
-    private inline fun forEachOwner(action: (RootNodeOwner) -> Unit) =
-        withOwnersCopy {
-            it.fastForEach(action)
-        }
-
-    private inline fun forEachOwnerReversed(action: (RootNodeOwner) -> Unit) =
-        withOwnersCopy {
+    private inline fun forEachLayerReversed(action: (AttachedComposeSceneLayer?) -> Unit) =
+        _layersCopyCache.withCopy {
             it.fastForEachReversed(action)
         }
 
-    private var focusedOwner: RootNodeOwner = mainOwner
+    private inline fun forEachOwner(action: (RootNodeOwner) -> Unit) =
+        _ownersCopyCache.withCopy {
+            it.fastForEach(action)
+        }
+
+    private var focusedLayer: AttachedComposeSceneLayer? = null
+    private val focusedOwner
+        get() = focusedLayer?.owner ?: mainOwner
     private var gestureOwner: RootNodeOwner? = null
     private var lastHoverOwner: RootNodeOwner? = null
-
-    private val lastFocusableOwner
-        get() = attachedLayers.lastOrNull { it.focusable }?.owner ?: mainOwner
 
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
-        attachedLayers.fastForEach {
-            it.dispose()
+        layers.fastForEach {
+            it.close()
         }
         super.close()
     }
 
+    override fun setKeyEventListener(
+        onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
+        onKeyEvent: ((KeyEvent) -> Boolean)?
+    ) {
+        mainOwner.setRootModifier(
+            KeyInputElement(
+                onKeyEvent = onKeyEvent,
+                onPreKeyEvent = onPreviewKeyEvent
+            )
+        )
+    }
+
     override fun calculateContentSize(): IntSize {
-        TODO("Not yet implemented")
+        check(!isClosed) { "ComposeScene is closed" }
+        return mainOwner.measureInConstraints(Constraints()) ?: IntSize.Zero
     }
 
     override fun createComposition(content: @Composable () -> Unit): Composition {
@@ -171,7 +175,6 @@ private class CombinedComposeSceneImpl(
             { compositionLocalContext },
             content = content
         )
-        // TODO: Set LocalComposeScene
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent) {
@@ -206,14 +209,29 @@ private class CombinedComposeSceneImpl(
      */
     private fun hoveredOwner(event: PointerInputEvent): RootNodeOwner {
         val position = event.pointers.first().position
-        return owners.lastOrNull { it.isInBounds(position) } ?: mainOwner
+        return layers.lastOrNull { it.isInBounds(position) }?.owner ?: mainOwner
     }
 
     /**
-     * Check if [focusedOwner] blocks input for this owner.
+     * Check if [focusedLayer] blocks input for this owner.
      */
-    private fun isInteractive(owner: RootNodeOwner?): Boolean =
-        owner == null || owners.indexOf(focusedOwner) <= owners.indexOf(owner)
+    private fun isInteractive(owner: RootNodeOwner?): Boolean {
+        if (owner == null || focusedLayer == null) {
+            return true
+        }
+        if (owner == mainOwner) {
+            return false
+        }
+        for (layer in layers) {
+            if (layer == focusedLayer) {
+                return true
+            }
+            if (layer.owner == owner) {
+                return false
+            }
+        }
+        return true
+    }
 
     private fun processPress(event: PointerInputEvent) {
         val currentGestureOwner = gestureOwner
@@ -222,20 +240,21 @@ private class CombinedComposeSceneImpl(
             return
         }
         val position = event.pointers.first().position
-        forEachOwnerReversed { owner ->
+        forEachLayerReversed { layer ->
 
             // If the position of in bounds of the owner - send event to it and stop processing
-            if (owner.isInBounds(position)) {
+            if (layer == null || layer.isInBounds(position)) {
+                val owner = layer?.owner ?: mainOwner
                 owner.onPointerInput(event)
                 gestureOwner = owner
                 return
             }
 
             // Input event is out of bounds - send click outside notification
-            // TODO owner.onOutsidePointerEvent?.invoke(event)
+            layer.onOutsidePointerEvent(event)
 
             // if the owner is in focus, do not pass the event to underlying owners
-            if (owner == focusedOwner) {
+            if (layer == focusedLayer) {
                 return
             }
         }
@@ -253,7 +272,7 @@ private class CombinedComposeSceneImpl(
                 // - It's not focusedOwner
                 // - It placed under focusedOwner or not exist at all
                 // In all these cases the even happened outside focused owner bounds
-                // TODO focusedOwner.onOutsidePointerEvent?.invoke(event)
+                focusedLayer?.onOutsidePointerEvent(event)
             }
         }
     }
@@ -335,17 +354,14 @@ private class CombinedComposeSceneImpl(
         density = density,
         layoutDirection = layoutDirection,
         compositionContext = compositionContext,
-        focusable = false, // TODO
     )
 
     private fun attach(layer: AttachedComposeSceneLayer) {
         check(!isClosed) { "ComposeScene is closed" }
-        owners.add(layer.owner)
+        layers.add(layer)
 
         if (layer.focusable) {
-            focusedOwner = layer.owner
-
-            // Exit event to lastHoverOwner will be sent via synthetic event on next frame
+            requestFocus(layer)
         }
         with(layer.owner.focusOwner) {
             if (isFocused) {
@@ -360,13 +376,9 @@ private class CombinedComposeSceneImpl(
 
     private fun detach(layer: AttachedComposeSceneLayer) {
         check(!isClosed) { "ComposeScene is closed" }
-        owners.remove(layer.owner)
+        layers.remove(layer)
 
-        if (layer.owner == focusedOwner) {
-            focusedOwner = lastFocusableOwner
-
-            // Enter event to new focusedOwner will be sent via synthetic event on next frame
-        }
+        releaseFocus(layer)
         if (layer.owner == lastHoverOwner) {
             lastHoverOwner = null
         }
@@ -377,27 +389,56 @@ private class CombinedComposeSceneImpl(
         invalidateIfNeeded()
     }
 
+    private fun requestFocus(layer: AttachedComposeSceneLayer) {
+        if (isInteractive(layer.owner)) {
+            focusedLayer = layer
+
+            // Exit event to lastHoverOwner will be sent via synthetic event on next frame
+        }
+        inputHandler.onPointerUpdate()
+        invalidateIfNeeded()
+    }
+
+    private fun releaseFocus(layer: AttachedComposeSceneLayer) {
+        if (layer == focusedLayer) {
+            focusedLayer = layers.lastOrNull { it.focusable }
+
+            // Enter event to new focusedOwner will be sent via synthetic event on next frame
+        }
+        inputHandler.onPointerUpdate()
+        invalidateIfNeeded()
+    }
+
     private inner class AttachedComposeSceneLayer(
         density: Density,
         layoutDirection: LayoutDirection,
         private val compositionContext: CompositionContext,
-        override var focusable: Boolean,
     ) : ComposeSceneLayer {
         val owner = RootNodeOwner(
             density = density,
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
-            constraints = constraints,
+            bounds = this@CombinedComposeSceneImpl.bounds,
             platformContext = composeSceneContext.platformContext,
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
         )
         private var composition: Composition? = null
+        private var callback: ((Boolean) -> Unit)? = null
 
         override var density: Density by owner::density
         override var layoutDirection: LayoutDirection by owner::layoutDirection
-        override var bounds: IntRect by owner::bounds
+        override var bounds: IntRect by mutableStateOf(this@CombinedComposeSceneImpl.bounds)
         override var scrimColor: Color? by mutableStateOf(null)
+        override var focusable: Boolean = false
+            set(value) {
+                field = value
+                if (value) {
+                    requestFocus(this)
+                } else {
+                    releaseFocus(this)
+                }
+            }
 
         private val windowInfo
             get() = composeSceneContext.platformContext.windowInfo
@@ -425,7 +466,7 @@ private class CombinedComposeSceneImpl(
             attach(this)
         }
 
-        override fun dispose() {
+        override fun close() {
             detach(this)
             composition?.dispose()
             owner.dispose()
@@ -448,7 +489,7 @@ private class CombinedComposeSceneImpl(
         override fun setOutsidePointerEventListener(
             onOutsidePointerEvent: ((Boolean) -> Unit)?,
         ) {
-            // TODO
+            callback = onOutsidePointerEvent
         }
 
         override fun setContent(content: @Composable () -> Unit) {
@@ -458,12 +499,40 @@ private class CombinedComposeSceneImpl(
                 content()
             }
         }
+
+        fun isInBounds(point: Offset): Boolean {
+            val intOffset = IntOffset(point.x.toInt(), point.y.toInt())
+            return bounds.contains(intOffset)
+        }
+
+        fun onOutsidePointerEvent(event: PointerInputEvent) {
+            callback?.invoke(event.isDismissRequest())
+        }
     }
 }
 
 private val PointerInputEvent.isGestureInProgress get() = pointers.fastAny { it.down }
 
-private fun RootNodeOwner.isInBounds(point: Offset): Boolean {
-    val intOffset = IntOffset(point.x.toInt(), point.y.toInt())
-    return bounds.contains(intOffset)
+private fun PointerInputEvent.isMainAction() =
+    button == PointerButton.Primary ||
+        button == null && pointers.size == 1
+
+private fun PointerInputEvent.isDismissRequest() =
+    eventType == PointerEventType.Release && isMainAction()
+
+private class CopiedList<T>(
+    private val populate: (MutableList<T>) -> Unit
+) : MutableList<T> by mutableListOf() {
+    inline fun withCopy(
+        block: (List<T>) -> Unit
+    ) {
+        // In case of recursive calls, allocate new list
+        val copy = if (isEmpty()) this else mutableListOf()
+        populate(copy)
+        try {
+            block(copy)
+        } finally {
+            copy.clear()
+        }
+    }
 }

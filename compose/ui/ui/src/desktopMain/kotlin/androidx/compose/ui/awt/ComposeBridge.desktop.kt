@@ -32,8 +32,9 @@ import androidx.compose.ui.scene.EmptyComposeSceneContext
 import androidx.compose.ui.scene.toPointerKeyboardModifiers
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.PlatformTextInputService
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -339,10 +340,7 @@ internal abstract class ComposeBridge(
             height = (component.height * scale).toInt()
         )
         windowInfo.containerSize = size
-        scene.constraints = Constraints(
-            maxWidth = size.width,
-            maxHeight = size.height
-        )
+        scene.bounds = IntRect(IntOffset.Zero, size)
     }
 
     protected fun resetSceneDensity() {

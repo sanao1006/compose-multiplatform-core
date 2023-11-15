@@ -49,7 +49,7 @@ internal class ComposeSceneInputHandler(
     /**
      * The mouse cursor position or null if cursor is not inside a scene.
      */
-    val lastKnownCursorPosition: Offset?
+    val lastKnownPointerPosition: Offset?
         get() = pointerPositions.values.firstOrNull()
 
     val hasInvalidations: Boolean

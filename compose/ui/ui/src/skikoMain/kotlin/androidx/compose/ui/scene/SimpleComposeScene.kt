@@ -23,12 +23,14 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyInputElement
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.node.RootNodeOwner
 import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import kotlin.coroutines.CoroutineContext
@@ -38,12 +40,14 @@ import kotlinx.coroutines.Dispatchers
 fun ComposeScene(
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+    bounds: IntRect = IntRect.Zero,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
     composeSceneContext: ComposeSceneContext = EmptyComposeSceneContext,
     invalidate: () -> Unit = {},
 ): ComposeScene = SimpleComposeSceneImpl(
     density = density,
     layoutDirection = layoutDirection,
+    bounds = bounds,
     coroutineContext = coroutineContext,
     composeSceneContext = composeSceneContext,
     invalidate = invalidate
@@ -53,6 +57,7 @@ fun ComposeScene(
 private class SimpleComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
+    bounds: IntRect,
     coroutineContext: CoroutineContext,
     private val composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
@@ -65,7 +70,7 @@ private class SimpleComposeSceneImpl(
             density = density,
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
-            constraints = constraints,
+            bounds = bounds,
             platformContext = composeSceneContext.platformContext,
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
@@ -86,20 +91,29 @@ private class SimpleComposeSceneImpl(
             mainOwner.layoutDirection = value
         }
 
-    override var constraints: Constraints = Constraints()
+    override var bounds: IntRect = bounds
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner.constraints = constraints
+            mainOwner.bounds = bounds
         }
-
-    override val semanticsOwner: SemanticsOwner
-        get() = mainOwner.semanticsOwner
 
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
         super.close()
+    }
+
+    override fun setKeyEventListener(
+        onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
+        onKeyEvent: ((KeyEvent) -> Boolean)?
+    ) {
+        mainOwner.setRootModifier(
+            KeyInputElement(
+                onKeyEvent = onKeyEvent,
+                onPreKeyEvent = onPreviewKeyEvent
+            )
+        )
     }
 
     override fun calculateContentSize(): IntSize {
