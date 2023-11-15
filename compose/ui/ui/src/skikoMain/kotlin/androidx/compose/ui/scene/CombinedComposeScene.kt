@@ -112,7 +112,7 @@ private class CombinedComposeSceneImpl(
     )
 
     private val layers = mutableListOf<AttachedComposeSceneLayer>()
-    private var isFocused = false
+    private var isFocused = true
 
     private val _layersCopyCache = CopiedList {
         it.add(null)

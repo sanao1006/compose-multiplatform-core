@@ -130,20 +130,21 @@ actual fun Dialog(
     properties: DialogProperties,
     content: @Composable () -> Unit
 ) {
-    // TODO
-//    if (properties.dismissOnBackPress) {
-//        modifier = modifier.onKeyEvent { event: KeyEvent ->
-//            if (event.isDismissRequest()) {
-//                onDismissRequest()
-//                true
-//            } else {
-//                false
-//            }
-//        }
-//    }
+    val onKeyEvent = if (properties.dismissOnBackPress) {
+        { event: KeyEvent ->
+            if (event.isDismissRequest()) {
+                onDismissRequest()
+                true
+            } else {
+                false
+            }
+        }
+    } else {
+        null
+    }
     val onOutsidePointerEvent = if (properties.dismissOnClickOutside) {
-        { isMainAction: Boolean ->
-            if (isMainAction) {
+        { isDismissRequest: Boolean ->
+            if (isDismissRequest) {
                 onDismissRequest()
             }
         }
@@ -152,6 +153,7 @@ actual fun Dialog(
     }
     DialogLayout(
         modifier = Modifier.semantics { dialog() },
+        onKeyEvent = onKeyEvent,
         onOutsidePointerEvent = onOutsidePointerEvent,
         properties = properties,
         content = content

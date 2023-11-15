@@ -34,7 +34,6 @@ import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.util.fastMaxBy
 import kotlin.math.min
 
-
 @Composable
 internal fun EmptyLayout(
     modifier: Modifier = Modifier

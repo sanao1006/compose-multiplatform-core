@@ -386,29 +386,21 @@ fun Popup(
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
     content: @Composable () -> Unit
 ) {
-    // TODO
-//    if (properties.dismissOnBackPress && onDismissRequest != null) {
-//        modifier = modifier.onKeyEvent { event: KeyEvent ->
-//            if (event.isDismissRequest()) {
-//                onDismissRequest()
-//                true
-//            } else {
-//                false
-//            }
-//        }
-//    }
-//    if (onPreviewKeyEvent != null || onKeyEvent != null) {
-//        modifier = modifier.then(
-//            KeyInputElement(
-//                onKeyEvent = onKeyEvent,
-//                onPreKeyEvent = onPreviewKeyEvent
-//            )
-//        )
-//    }
-    val onOutsidePointerEvent = if (properties.dismissOnClickOutside && onDismissRequest != null) {
-        { _: Boolean ->
-            onDismissRequest()
+    val overriddenOnKeyEvent = if (properties.dismissOnBackPress && onDismissRequest != null) {
+        { event: KeyEvent ->
+            val consumed = onKeyEvent?.invoke(event) ?: false
+            if (!consumed && event.isDismissRequest()) {
+                onDismissRequest()
+                true
+            } else {
+                consumed
+            }
         }
+    } else {
+        onKeyEvent
+    }
+    val onOutsidePointerEvent = if (properties.dismissOnClickOutside && onDismissRequest != null) {
+        { _: Boolean -> onDismissRequest() }
     } else {
         null
     }
@@ -417,7 +409,7 @@ fun Popup(
         properties = properties,
         modifier = Modifier.semantics { popup() },
         onPreviewKeyEvent = onPreviewKeyEvent,
-        onKeyEvent = onKeyEvent,
+        onKeyEvent = overriddenOnKeyEvent,
         onOutsidePointerEvent = onOutsidePointerEvent,
         content = content,
     )
