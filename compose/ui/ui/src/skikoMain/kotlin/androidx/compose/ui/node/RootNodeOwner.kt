@@ -237,11 +237,7 @@ internal class RootNodeOwner(
         override val focusOwner get() = this@RootNodeOwner.focusOwner
         override val windowInfo get() = platformContext.windowInfo
 
-        @Suppress("DEPRECATION")
-        @Deprecated(
-            "fontLoader is deprecated, use fontFamilyResolver",
-            replaceWith = ReplaceWith("fontFamilyResolver")
-        )
+        @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
         override val fontLoader = FontLoader()
         override val fontFamilyResolver = createFontFamilyResolver()
         override val layoutDirection get() = _layoutDirection
