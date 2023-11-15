@@ -307,7 +307,6 @@ internal abstract class ComposeBridge(
         )
     }
 
-
     fun setContent(content: @Composable () -> Unit) {
         // If we call it before attaching, everything probably will be fine,
         // but the first composition will be useless, as we set density=1

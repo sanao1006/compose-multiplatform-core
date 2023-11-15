@@ -16,14 +16,10 @@
 
 package androidx.compose.ui.node
 
-import androidx.compose.runtime.Composition
-import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.collection.mutableVectorOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.Autofill
 import androidx.compose.ui.autofill.AutofillTree
@@ -33,7 +29,6 @@ import androidx.compose.ui.focus.FocusOwnerImpl
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -56,12 +51,10 @@ import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.platform.DefaultAccessibilityManager
 import androidx.compose.ui.platform.DefaultHapticFeedback
-import androidx.compose.ui.platform.DefaultUiApplier
 import androidx.compose.ui.platform.PlatformClipboardManager
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformRootForTest
 import androidx.compose.ui.platform.RenderNodeLayer
-import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.scene.ComposeSceneInputHandler
 import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.semantics.EmptySemanticsElement
@@ -80,410 +73,114 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.round
-import androidx.compose.ui.unit.toIntRect
 import kotlin.coroutines.CoroutineContext
 
-internal interface RootNodeOwner {
-    var density: Density
-    var layoutDirection: LayoutDirection
-    var bounds: IntRect
-
-    val platformContext: PlatformContext
-
-    val semanticsOwner: SemanticsOwner
-    val focusOwner: FocusOwner
-
-    fun dispose()
-
-    fun hitTestInteropView(position: Offset): Boolean
-    fun onPointerInput(event: PointerInputEvent)
-    fun onKeyEvent(keyEvent: KeyEvent): Boolean
-
-    /**
-     * Provides a way to measure Owner's content in given [constraints]
-     * Draw/pointer and other callbacks won't be called here like in [measureAndLayout] functions
-     */
-    fun measureInConstraints(constraints: Constraints): IntSize
-
-    fun measureAndLayout()
-    fun draw(canvas: Canvas)
-
-    fun setRootModifier(modifier: Modifier)
-    fun createComposition(parent: CompositionContext): Composition
-}
-
-@OptIn(InternalComposeUiApi::class)
-internal fun RootNodeOwner(
+internal class RootNodeOwner(
     density: Density,
     layoutDirection: LayoutDirection,
+    bounds: IntRect,
     coroutineContext: CoroutineContext,
-    platformContext: PlatformContext,
-    bounds: IntRect,
-    snapshotInvalidationTracker: SnapshotInvalidationTracker,
-    inputHandler: ComposeSceneInputHandler,
-) : RootNodeOwner = RootNodeOwnerImpl(
-    density = density,
-    layoutDirection = layoutDirection,
-    bounds = bounds,
-    coroutineContext = coroutineContext,
-    platformContext = platformContext,
-    snapshotInvalidationTracker = snapshotInvalidationTracker,
-    inputHandler = inputHandler
-)
-
-@OptIn(
-    ExperimentalComposeUiApi::class,
-    ExperimentalTextApi::class,
-    InternalCoreApi::class,
-    InternalComposeUiApi::class
-)
-private class RootNodeOwnerImpl(
-    density: Density,
-    layoutDirection: LayoutDirection,
-    bounds: IntRect,
-    override val coroutineContext: CoroutineContext,
-    override val platformContext: PlatformContext,
+    val platformContext: PlatformContext,
     private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
     private val inputHandler: ComposeSceneInputHandler,
-) : Owner, RootNodeOwner, PlatformRootForTest {
-    override val windowInfo: WindowInfo
-        get() = platformContext.windowInfo
+) {
+    // TODO(https://github.com/JetBrains/compose-multiplatform/issues/2944)
+    //  Check if ComposePanel/SwingPanel focus interop work correctly with new features of
+    //  the focus system (it works with the old features like moveFocus/clearFocus)
+    val focusOwner: FocusOwner = FocusOwnerImpl {
+        owner.registerOnEndApplyChangesListener(it)
+    }.also {
+        it.layoutDirection = layoutDirection
+    }
+    private val rootModifier = EmptySemanticsElement
+        .then(focusOwner.modifier)
+        .onKeyEvent {
+            // TODO(b/177931787) : Consider creating a KeyInputManager like we have for FocusManager so
+            //  that this common logic can be used by all owners.
+            val focusDirection = owner.getFocusDirection(it)
+            if (focusDirection == null || it.type != KeyEventType.KeyDown) return@onKeyEvent false
 
-    override var bounds by mutableStateOf(bounds)
-
-    override var density by mutableStateOf(density)
+            platformContext.inputModeManager.requestInputMode(InputMode.Keyboard)
+            // Consume the key event if we moved focus.
+            focusOwner.moveFocus(focusDirection)
+        }
+    val owner: Owner = OwnerImpl(layoutDirection, coroutineContext)
+    val semanticsOwner = SemanticsOwner(owner.root)
+    var bounds by mutableStateOf(bounds)
+    var density: Density by mutableStateOf(density)
 
     private var _layoutDirection by mutableStateOf(layoutDirection)
-    override var layoutDirection: LayoutDirection
+    var layoutDirection: LayoutDirection
         get() = _layoutDirection
         set(value) {
             _layoutDirection = value
             focusOwner.layoutDirection = value
-            root.layoutDirection = value
+            owner.root.layoutDirection = value
         }
 
-    override val sharedDrawScope = LayoutNodeDrawScope()
-
-    // TODO(https://github.com/JetBrains/compose-multiplatform/issues/2944)
-    //  Check if ComposePanel/SwingPanel focus interop work correctly with new features of
-    //  the focus system (it works with the old features like moveFocus/clearFocus)
-    override val focusOwner: FocusOwner = FocusOwnerImpl {
-        registerOnEndApplyChangesListener(it)
-    }.also {
-        it.layoutDirection = layoutDirection
-    }
-
-    override val inputModeManager: InputModeManager
-        get() = platformContext.inputModeManager
-
-    override val modifierLocalManager = ModifierLocalManager(this)
-
-    // TODO(b/177931787) : Consider creating a KeyInputManager like we have for FocusManager so
-    //  that this common logic can be used by all owners.
-    private val keyInputModifier = Modifier.onKeyEvent {
-        val focusDirection = getFocusDirection(it)
-        if (focusDirection == null || it.type != KeyEventType.KeyDown) return@onKeyEvent false
-
-        inputModeManager.requestInputMode(InputMode.Keyboard)
-        // Consume the key event if we moved focus.
-        focusOwner.moveFocus(focusDirection)
-    }
-
-    override val root = LayoutNode().also {
-        it.layoutDirection = layoutDirection
-        it.measurePolicy = RootMeasurePolicy
-        it.modifier = EmptySemanticsElement
-            .then(focusOwner.modifier)
-            .then(keyInputModifier)
-    }
-
-    override val rootForTest
-        get() = this
-
-    override val snapshotObserver = snapshotInvalidationTracker.snapshotObserver()
-
-    private val pointerInputEventProcessor = PointerInputEventProcessor(root)
-    private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
-    private val endApplyChangesListeners = mutableVectorOf<(() -> Unit)?>()
-
-    override val textInputService = TextInputService(
-        platformTextInputService = platformContext.textInputService
-    )
-
-    @Suppress("UNUSED_ANONYMOUS_PARAMETER")
-    @OptIn(InternalTextApi::class)
-    override val platformTextInputPluginRegistry: PlatformTextInputPluginRegistry
-        get() = PlatformTextInputPluginRegistryImpl { factory, platformTextInput ->
-            TODO("See https://issuetracker.google.com/267235947")
-        }
-
-    @Suppress("DEPRECATION")
-    @Deprecated(
-        "fontLoader is deprecated, use fontFamilyResolver",
-        replaceWith = ReplaceWith("fontFamilyResolver")
-    )
-    override val fontLoader = FontLoader()
-
-    override val fontFamilyResolver = createFontFamilyResolver()
-
-    override val hapticFeedBack = DefaultHapticFeedback()
-
-    override val clipboardManager = PlatformClipboardManager()
-
-    override val accessibilityManager = DefaultAccessibilityManager()
-
-    override val textToolbar
-        get() = platformContext.textToolbar
-
-    override val semanticsOwner: SemanticsOwner = SemanticsOwner(root)
-
-    override val autofillTree = AutofillTree()
-
-    override val autofill: Autofill?
-        get() = null
-
-    override val viewConfiguration
-        get() = platformContext.viewConfiguration
-
-    override val visibleBounds: IntRect
-        get() = bounds.intersect(IntRect(IntOffset.Zero, windowInfo.containerSize))
-
-    override val hasPendingMeasureOrLayout: Boolean
-        get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout
+    private val rootForTest = PlatformRootForTestImpl()
+    private val snapshotObserver = snapshotInvalidationTracker.snapshotObserver()
+    private val pointerInputEventProcessor = PointerInputEventProcessor(owner.root)
+    private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(owner.root)
 
     init {
         snapshotObserver.startObserving()
-        root.attach(this)
+        owner.root.attach(owner)
         platformContext.rootForTestListener?.onRootForTestCreated(rootForTest)
     }
 
-    override fun dispose() {
+    fun dispose() {
         platformContext.rootForTestListener?.onRootForTestDisposed(rootForTest)
         snapshotObserver.stopObserving()
         // we don't need to call root.detach() because root will be garbage collected
     }
 
-    override var showLayoutBounds = false
-
-    override fun requestFocus() = platformContext.requestFocus()
-
-    override fun onAttach(node: LayoutNode) = Unit
-
-    override fun onDetach(node: LayoutNode) {
-        measureAndLayoutDelegate.onNodeDetached(node)
-        snapshotObserver.clear(node)
-        needClearObservations = true
-    }
-
-    override val measureIteration: Long get() = measureAndLayoutDelegate.measureIteration
-
     private var needClearObservations = false
-    fun clearInvalidObservations() {
+    private fun clearInvalidObservations() {
         if (needClearObservations) {
             snapshotObserver.clearInvalidObservations()
             needClearObservations = false
         }
     }
 
-    override fun measureInConstraints(constraints: Constraints): IntSize {
+    /**
+     * Provides a way to measure Owner's content in given [constraints]
+     * Draw/pointer and other callbacks won't be called here like in [measureAndLayout] functions
+     */
+    fun measureInConstraints(constraints: Constraints): IntSize {
         try {
             // TODO: is it possible to measure without reassigning root constraints?
             measureAndLayoutDelegate.updateRootConstraints(constraints)
             measureAndLayoutDelegate.measureOnly()
 
             // Don't use mainOwner.root.width here, as it strictly coerced by [constraints]
+            val children = owner.root.children
             return IntSize(
-                root.children.maxOfOrNull { it.outerCoordinator.measuredWidth } ?: 0,
-                root.children.maxOfOrNull { it.outerCoordinator.measuredHeight } ?: 0,
+                width = children.maxOfOrNull { it.outerCoordinator.measuredWidth } ?: 0,
+                height = children.maxOfOrNull { it.outerCoordinator.measuredHeight } ?: 0,
             )
         } finally {
             measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
         }
     }
 
-    override fun measureAndLayout() {
-        measureAndLayout(sendPointerUpdate = true)
+    fun measureAndLayout() {
+        owner.measureAndLayout(sendPointerUpdate = true)
     }
 
-    override fun measureAndLayoutForTest() {
-        measureAndLayout(sendPointerUpdate = true)
-    }
-
-    override fun measureAndLayout(sendPointerUpdate: Boolean) {
-        measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
-        val rootNodeResized = measureAndLayoutDelegate.measureAndLayout {
-            if (sendPointerUpdate) {
-                inputHandler.onPointerUpdate()
-            }
-        }
-        if (rootNodeResized) {
-            snapshotInvalidationTracker.requestDraw()
-        }
-        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
-    }
-
-    override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
-        measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
-        inputHandler.onPointerUpdate()
-        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
-    }
-
-    override fun forceMeasureTheSubtree(layoutNode: LayoutNode, affectsLookahead: Boolean) {
-        measureAndLayoutDelegate.forceMeasureTheSubtree(layoutNode, affectsLookahead)
-    }
-
-    override fun onRequestMeasure(
-        layoutNode: LayoutNode,
-        affectsLookahead: Boolean,
-        forceRequest: Boolean,
-        scheduleMeasureAndLayout: Boolean
-    ) {
-        if (affectsLookahead) {
-            if (measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest) &&
-                scheduleMeasureAndLayout
-            ) {
-                snapshotInvalidationTracker.requestLayout()
-            }
-        } else if (measureAndLayoutDelegate.requestRemeasure(layoutNode, forceRequest) &&
-            scheduleMeasureAndLayout
-        ) {
-            snapshotInvalidationTracker.requestLayout()
-        }
-    }
-
-    override fun onRequestRelayout(
-        layoutNode: LayoutNode,
-        affectsLookahead: Boolean,
-        forceRequest: Boolean
-    ) {
-        this.onRequestMeasure(layoutNode, affectsLookahead, forceRequest, scheduleMeasureAndLayout = true)
-    }
-
-    override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
-        measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
-        snapshotInvalidationTracker.requestLayout()
-    }
-
-    override fun createLayer(
-        drawBlock: (Canvas) -> Unit,
-        invalidateParentLayer: () -> Unit
-    ) = RenderNodeLayer(
-        density,
-        invalidateParentLayer = {
-            invalidateParentLayer()
-            snapshotInvalidationTracker.requestDraw()
-        },
-        drawBlock = drawBlock,
-        onDestroy = { needClearObservations = true }
-    )
-
-    override fun onSemanticsChange() {
-        platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
-    }
-
-    override fun onLayoutChange(layoutNode: LayoutNode) {
-        platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
-    }
-
-    override fun getFocusDirection(keyEvent: KeyEvent): FocusDirection? {
-        return when (keyEvent.key) {
-            Key.Tab -> if (keyEvent.isShiftPressed) FocusDirection.Previous else FocusDirection.Next
-            Key.DirectionCenter -> FocusDirection.In
-            Key.Back -> FocusDirection.Out
-            else -> null
-        }
-    }
-
-    override fun calculatePositionInWindow(localPosition: Offset): Offset = localPosition
-
-    override fun calculateLocalPosition(positionInWindow: Offset): Offset = positionInWindow
-
-    override fun draw(canvas: Canvas) {
-        root.draw(canvas)
+    fun draw(canvas: Canvas) {
+        owner.root.draw(canvas)
         clearInvalidObservations()
     }
 
-    override fun setRootModifier(modifier: Modifier) {
-        root.modifier = EmptySemanticsElement
-            .then(focusOwner.modifier)
-            .then(keyInputModifier)
-            .then(modifier)
+    fun setRootModifier(modifier: Modifier) {
+        owner.root.modifier = rootModifier then modifier
     }
 
-    override fun createComposition(parent: CompositionContext): Composition {
-        return Composition(DefaultUiApplier(root), parent)
-    }
-
-    /**
-     * Handles the input initiated by tests.
-     */
-    override fun sendPointerEvent(
-        eventType: PointerEventType,
-        position: Offset,
-        scrollDelta: Offset,
-        timeMillis: Long,
-        type: PointerType,
-        buttons: PointerButtons?,
-        keyboardModifiers: PointerKeyboardModifiers?,
-        nativeEvent: Any?,
-        button: PointerButton?
-    ) {
-        snapshotInvalidationTracker.onLayout()
-        measureAndLayout()
-        inputHandler.onLayout()
-
-        inputHandler.onPointerEvent(
-            eventType = eventType,
-            position = position,
-            scrollDelta = scrollDelta,
-            timeMillis = timeMillis,
-            type = type,
-            buttons = buttons,
-            keyboardModifiers = keyboardModifiers,
-            nativeEvent = nativeEvent,
-            button = button
-        )
-    }
-
-    /**
-     * Handles the input initiated by tests.
-     */
-    override fun sendPointerEvent(
-        eventType: PointerEventType,
-        pointers: List<ComposeScenePointer>,
-        buttons: PointerButtons,
-        keyboardModifiers: PointerKeyboardModifiers,
-        scrollDelta: Offset,
-        timeMillis: Long,
-        nativeEvent: Any?,
-        button: PointerButton?,
-    ) {
-        snapshotInvalidationTracker.onLayout()
-        measureAndLayout()
-        inputHandler.onLayout()
-
-        inputHandler.onPointerEvent(
-            eventType = eventType,
-            pointers = pointers,
-            buttons = buttons,
-            keyboardModifiers = keyboardModifiers,
-            scrollDelta = scrollDelta,
-            timeMillis = timeMillis,
-            nativeEvent = nativeEvent,
-            button = button
-        )
-    }
-
-    /**
-     * Handles the input initiated by tests or accessibility.
-     */
-    override fun sendKeyEvent(keyEvent: KeyEvent): Boolean {
-        return inputHandler.onKeyEvent(keyEvent)
-    }
-
-    override fun onPointerInput(event: PointerInputEvent) {
+    @OptIn(InternalCoreApi::class)
+    fun onPointerInput(event: PointerInputEvent) {
         if (event.button != null) {
-            inputModeManager.requestInputMode(InputMode.Touch)
+            platformContext.inputModeManager.requestInputMode(InputMode.Touch)
         }
         val isInBounds = event.eventType != PointerEventType.Exit && event.pointers.all {
             bounds.contains(it.position.round())
@@ -495,54 +192,288 @@ private class RootNodeOwnerImpl(
         )
     }
 
-    override fun onKeyEvent(keyEvent: KeyEvent): Boolean {
+    fun onKeyEvent(keyEvent: KeyEvent): Boolean {
         return focusOwner.dispatchKeyEvent(keyEvent)
     }
 
-    override fun hitTestInteropView(position: Offset): Boolean {
+    fun hitTestInteropView(position: Offset): Boolean {
         val result = HitTestResult()
-        pointerInputEventProcessor.root.hitTest(position, result, true)
+        owner.root.hitTest(position, result, true)
         val last = result.lastOrNull()
         return (last as? BackwardsCompatNode)?.element is InteropViewCatchPointerModifier
     }
 
-    override fun onEndApplyChanges() {
-        clearInvalidObservations()
+    private inner class OwnerImpl(
+        layoutDirection: LayoutDirection,
+        override val coroutineContext: CoroutineContext,
+    ) : Owner {
 
-        // Listeners can add more items to the list and we want to ensure that they
-        // are executed after being added, so loop until the list is empty
-        while (endApplyChangesListeners.isNotEmpty()) {
-            val size = endApplyChangesListeners.size
-            for (i in 0 until size) {
-                val listener = endApplyChangesListeners[i]
-                // null out the item so that if the listener is re-added then we execute it again.
-                endApplyChangesListeners[i] = null
-                listener?.invoke()
+        override val root = LayoutNode().also {
+            it.layoutDirection = layoutDirection
+            it.measurePolicy = RootMeasurePolicy
+            it.modifier = rootModifier
+        }
+
+        override val sharedDrawScope = LayoutNodeDrawScope()
+        override val rootForTest get() = this@RootNodeOwner.rootForTest
+        override val hapticFeedBack = DefaultHapticFeedback()
+        override val inputModeManager get() = platformContext.inputModeManager
+        override val clipboardManager = PlatformClipboardManager()
+        override val accessibilityManager = DefaultAccessibilityManager()
+        override val textToolbar get() = platformContext.textToolbar
+        override val autofillTree = AutofillTree()
+        override val autofill: Autofill?  get() = null
+        override val density get() = this@RootNodeOwner.density
+        override val textInputService = TextInputService(platformContext.textInputService)
+
+        @Suppress("UNUSED_ANONYMOUS_PARAMETER")
+        @OptIn(InternalTextApi::class, ExperimentalTextApi::class)
+        override val platformTextInputPluginRegistry: PlatformTextInputPluginRegistry
+            get() = PlatformTextInputPluginRegistryImpl { factory, platformTextInput ->
+                TODO("See https://issuetracker.google.com/267235947")
             }
-            // Remove all the items that were visited. Removing items shifts all items after
-            // to the front of the list, so removing in a chunk is cheaper than removing one-by-one
-            endApplyChangesListeners.removeRange(0, size)
+
+        override val pointerIconService = PointerIconServiceImpl()
+        override val focusOwner get() = this@RootNodeOwner.focusOwner
+        override val windowInfo get() = platformContext.windowInfo
+
+        @Suppress("DEPRECATION")
+        @Deprecated(
+            "fontLoader is deprecated, use fontFamilyResolver",
+            replaceWith = ReplaceWith("fontFamilyResolver")
+        )
+        override val fontLoader = FontLoader()
+        override val fontFamilyResolver = createFontFamilyResolver()
+        override val layoutDirection get() = _layoutDirection
+        override var showLayoutBounds = false
+            @InternalCoreApi
+            set
+
+        override val modifierLocalManager = ModifierLocalManager(this)
+        override val snapshotObserver get() = this@RootNodeOwner.snapshotObserver
+        override val viewConfiguration get() = platformContext.viewConfiguration
+        override val measureIteration: Long get() = measureAndLayoutDelegate.measureIteration
+
+        override fun requestFocus() = platformContext.requestFocus()
+        override fun onAttach(node: LayoutNode) = Unit
+        override fun onDetach(node: LayoutNode) {
+            measureAndLayoutDelegate.onNodeDetached(node)
+            snapshotObserver.clear(node)
+            needClearObservations = true
+        }
+
+        override fun measureAndLayout(sendPointerUpdate: Boolean) {
+            measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
+            val rootNodeResized = measureAndLayoutDelegate.measureAndLayout {
+                if (sendPointerUpdate) {
+                    inputHandler.onPointerUpdate()
+                }
+            }
+            if (rootNodeResized) {
+                snapshotInvalidationTracker.requestDraw()
+            }
+            measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+        }
+
+        override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
+            measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
+            inputHandler.onPointerUpdate()
+            measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+        }
+
+        override fun forceMeasureTheSubtree(layoutNode: LayoutNode, affectsLookahead: Boolean) {
+            measureAndLayoutDelegate.forceMeasureTheSubtree(layoutNode, affectsLookahead)
+        }
+
+        override fun onRequestMeasure(
+            layoutNode: LayoutNode,
+            affectsLookahead: Boolean,
+            forceRequest: Boolean,
+            scheduleMeasureAndLayout: Boolean
+        ) {
+            if (affectsLookahead) {
+                if (measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest) &&
+                    scheduleMeasureAndLayout
+                ) {
+                    snapshotInvalidationTracker.requestLayout()
+                }
+            } else if (measureAndLayoutDelegate.requestRemeasure(layoutNode, forceRequest) &&
+                scheduleMeasureAndLayout
+            ) {
+                snapshotInvalidationTracker.requestLayout()
+            }
+        }
+
+        override fun onRequestRelayout(
+            layoutNode: LayoutNode,
+            affectsLookahead: Boolean,
+            forceRequest: Boolean
+        ) {
+            this.onRequestMeasure(layoutNode, affectsLookahead, forceRequest, scheduleMeasureAndLayout = true)
+        }
+
+        override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
+            measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
+            snapshotInvalidationTracker.requestLayout()
+        }
+
+        override fun createLayer(
+            drawBlock: (Canvas) -> Unit,
+            invalidateParentLayer: () -> Unit
+        ) = RenderNodeLayer(
+            density,
+            invalidateParentLayer = {
+                invalidateParentLayer()
+                snapshotInvalidationTracker.requestDraw()
+            },
+            drawBlock = drawBlock,
+            onDestroy = { needClearObservations = true }
+        )
+
+        override fun onSemanticsChange() {
+            platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
+        }
+
+        override fun onLayoutChange(layoutNode: LayoutNode) {
+            platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
+        }
+
+        override fun getFocusDirection(keyEvent: KeyEvent): FocusDirection? {
+            return when (keyEvent.key) {
+                Key.Tab -> if (keyEvent.isShiftPressed) FocusDirection.Previous else FocusDirection.Next
+                Key.DirectionCenter -> FocusDirection.In
+                Key.Back -> FocusDirection.Out
+                else -> null
+            }
+        }
+
+        override fun calculatePositionInWindow(localPosition: Offset): Offset = localPosition
+
+        override fun calculateLocalPosition(positionInWindow: Offset): Offset = positionInWindow
+
+        private val endApplyChangesListeners = mutableVectorOf<(() -> Unit)?>()
+
+        override fun onEndApplyChanges() {
+            clearInvalidObservations()
+
+            // Listeners can add more items to the list and we want to ensure that they
+            // are executed after being added, so loop until the list is empty
+            while (endApplyChangesListeners.isNotEmpty()) {
+                val size = endApplyChangesListeners.size
+                for (i in 0 until size) {
+                    val listener = endApplyChangesListeners[i]
+                    // null out the item so that if the listener is re-added then we execute it again.
+                    endApplyChangesListeners[i] = null
+                    listener?.invoke()
+                }
+                // Remove all the items that were visited. Removing items shifts all items after
+                // to the front of the list, so removing in a chunk is cheaper than removing one-by-one
+                endApplyChangesListeners.removeRange(0, size)
+            }
+        }
+
+        override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
+            if (listener !in endApplyChangesListeners) {
+                endApplyChangesListeners += listener
+            }
+        }
+
+        override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
+            measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
+            snapshotInvalidationTracker.requestLayout()
         }
     }
 
-    override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
-        if (listener !in endApplyChangesListeners) {
-            endApplyChangesListeners += listener
+    private inner class PlatformRootForTestImpl : PlatformRootForTest {
+        override val density get() = this@RootNodeOwner.density
+        override val textInputService get() = owner.textInputService
+        override val semanticsOwner get() = this@RootNodeOwner.semanticsOwner
+        override val visibleBounds: IntRect
+            get() = bounds.intersect(
+                IntRect(
+                    offset = IntOffset.Zero,
+                    size = platformContext.windowInfo.containerSize
+                )
+            )
+
+        override val hasPendingMeasureOrLayout: Boolean
+            get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout
+
+        override fun measureAndLayoutForTest() {
+            owner.measureAndLayout(sendPointerUpdate = true)
+        }
+
+        /**
+         * Handles the input initiated by tests.
+         */
+        override fun sendPointerEvent(
+            eventType: PointerEventType,
+            position: Offset,
+            scrollDelta: Offset,
+            timeMillis: Long,
+            type: PointerType,
+            buttons: PointerButtons?,
+            keyboardModifiers: PointerKeyboardModifiers?,
+            nativeEvent: Any?,
+            button: PointerButton?
+        ) {
+            snapshotInvalidationTracker.onLayout()
+            measureAndLayout()
+            inputHandler.onLayout()
+
+            inputHandler.onPointerEvent(
+                eventType = eventType,
+                position = position,
+                scrollDelta = scrollDelta,
+                timeMillis = timeMillis,
+                type = type,
+                buttons = buttons,
+                keyboardModifiers = keyboardModifiers,
+                nativeEvent = nativeEvent,
+                button = button
+            )
+        }
+
+        /**
+         * Handles the input initiated by tests.
+         */
+        override fun sendPointerEvent(
+            eventType: PointerEventType,
+            pointers: List<ComposeScenePointer>,
+            buttons: PointerButtons,
+            keyboardModifiers: PointerKeyboardModifiers,
+            scrollDelta: Offset,
+            timeMillis: Long,
+            nativeEvent: Any?,
+            button: PointerButton?,
+        ) {
+            snapshotInvalidationTracker.onLayout()
+            measureAndLayout()
+            inputHandler.onLayout()
+
+            inputHandler.onPointerEvent(
+                eventType = eventType,
+                pointers = pointers,
+                buttons = buttons,
+                keyboardModifiers = keyboardModifiers,
+                scrollDelta = scrollDelta,
+                timeMillis = timeMillis,
+                nativeEvent = nativeEvent,
+                button = button
+            )
+        }
+
+        /**
+         * Handles the input initiated by tests or accessibility.
+         */
+        override fun sendKeyEvent(keyEvent: KeyEvent): Boolean {
+            return inputHandler.onKeyEvent(keyEvent)
         }
     }
 
-    override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
-        measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
-        snapshotInvalidationTracker.requestLayout()
-    }
-
-    override val pointerIconService = object : PointerIconService {
+    private inner class PointerIconServiceImpl : PointerIconService {
         private var desiredPointerIcon: PointerIcon? = null
-
-        override fun getIcon(): PointerIcon {
-            return desiredPointerIcon ?: PointerIcon.Default
-        }
-
+        override fun getIcon(): PointerIcon = desiredPointerIcon ?: PointerIcon.Default
         override fun setIcon(value: PointerIcon?) {
             desiredPointerIcon = value
             platformContext.setPointerIcon(desiredPointerIcon ?: PointerIcon.Default)
@@ -550,7 +481,7 @@ private class RootNodeOwnerImpl(
     }
 }
 
-internal fun IntRect.toConstraints() =
+private fun IntRect.toConstraints() =
     Constraints(maxWidth = width, maxHeight = height)
 
 private object IdentityPositionCalculator: PositionCalculator {

@@ -112,7 +112,7 @@ internal abstract class BaseComposeScene(
 
         composition?.dispose()
         composition = createComposition {
-            CompositionLocalProvider( // TODO: Combine with other platform specifics
+            CompositionLocalProvider(
                 LocalComposeScene provides this,
                 content = content
             )

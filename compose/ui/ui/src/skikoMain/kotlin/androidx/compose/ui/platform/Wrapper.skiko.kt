@@ -42,8 +42,7 @@ internal fun RootNodeOwner.setContent(
     getCompositionLocalContext: () -> CompositionLocalContext? = { null },
     content: @Composable () -> Unit
 ): Composition {
-    val composition = createComposition(parent)
-    val owner = this as Owner
+    val composition = Composition(DefaultUiApplier(owner.root), parent)
     composition.setContent {
         getCompositionLocalContext().provide {
             ProvideCommonCompositionLocals(
