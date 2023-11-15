@@ -27,8 +27,6 @@ import androidx.compose.ui.input.key.KeyInputElement
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.node.RootNodeOwner
 import androidx.compose.ui.platform.setContent
-import androidx.compose.ui.semantics.SemanticsOwner
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -42,7 +40,7 @@ fun ComposeScene(
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
     bounds: IntRect = IntRect.Zero,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
-    composeSceneContext: ComposeSceneContext = EmptyComposeSceneContext,
+    composeSceneContext: ComposeSceneContext = ComposeSceneContext.Empty,
     invalidate: () -> Unit = {},
 ): ComposeScene = SimpleComposeSceneImpl(
     density = density,
@@ -59,10 +57,11 @@ private class SimpleComposeSceneImpl(
     layoutDirection: LayoutDirection,
     bounds: IntRect,
     coroutineContext: CoroutineContext,
-    private val composeSceneContext: ComposeSceneContext,
+    composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
 ) : BaseComposeScene(
     coroutineContext = coroutineContext,
+    composeSceneContext = composeSceneContext,
     invalidate = invalidate
 ) {
     private val mainOwner by lazy {

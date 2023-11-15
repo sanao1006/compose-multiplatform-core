@@ -139,7 +139,7 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
         layoutDirection = layoutDirection,
         coroutineContext = coroutineContext,
     ).apply {
-        constraints = Constraints(maxWidth = surface.width, maxHeight = surface.height)
+        bounds = IntRect(IntOffset.Zero, IntSize(width, height))
         setContent(content = content)
     }
 
@@ -288,7 +288,6 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
     ): Unit = scene.sendPointerEvent(
         eventType, pointers, buttons, keyboardModifiers, scrollDelta, timeMillis, nativeEvent, button
     )
-
 
     /**
      * Send [KeyEvent] to the content.

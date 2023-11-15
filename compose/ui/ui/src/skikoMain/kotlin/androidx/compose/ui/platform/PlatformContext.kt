@@ -25,10 +25,8 @@ import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
-import androidx.compose.ui.input.InputModeManagerImpl
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.node.Owner
-import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.ImeAction
@@ -42,7 +40,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 @InternalComposeUiApi
 interface PlatformContext {
     val windowInfo: WindowInfo
-    val inputContext: InputContext
+    // TODO val isWindowTransparent: Boolean
+
+    val viewConfiguration: ViewConfiguration
+    val inputModeManager: InputModeManager
+    val textInputService: PlatformTextInputService
+    val textToolbar: TextToolbar
+    fun setPointerIcon(pointerIcon: PointerIcon)
 
     val focusManager: FocusManager
     fun requestFocus(): Boolean
@@ -50,17 +54,9 @@ interface PlatformContext {
     val rootForTestListener: RootForTestListener?
     val accessibilityListener: AccessibilityListener?
 
-    interface InputContext {
-        val viewConfiguration: ViewConfiguration
-        val inputModeManager: InputModeManager
-        val textInputService: PlatformTextInputService
-        val textToolbar: TextToolbar
-        fun setPointerIcon(pointerIcon: PointerIcon)
-    }
-
     interface RootForTestListener {
-        fun onRootForTestCreated(root: RootForTest)
-        fun onRootForTestDisposed(root: RootForTest)
+        fun onRootForTestCreated(root: PlatformRootForTest)
+        fun onRootForTestDisposed(root: PlatformRootForTest)
     }
 
     interface AccessibilityListener {
@@ -68,33 +64,11 @@ interface PlatformContext {
 
         fun onSemanticsChange(semanticsOwner: SemanticsOwner)
     }
-}
 
-@InternalComposeUiApi
-class EmptyPlatformContext(
-    override val windowInfo: WindowInfo = WindowInfoImpl().apply {
-        // true is a better default if platform doesn't provide WindowInfo.
-        // otherwise UI will be rendered always in unfocused mode
-        // (hidden textfield cursor, gray titlebar, etc)
-        isWindowFocused = true
-    },
-    textInputService: PlatformTextInputService = EmptyPlatformTextInputService,
-    override val rootForTestListener: PlatformContext.RootForTestListener? = null,
-    override val accessibilityListener: PlatformContext.AccessibilityListener? = null
-) : PlatformContext {
-    override val inputContext = object : PlatformContext.InputContext {
-        override val viewConfiguration get() = EmptyViewConfiguration
-        override val inputModeManager = DefaultInputModeManager()
-        override val textInputService = textInputService
-        override val textToolbar: TextToolbar get() = EmptyTextToolbar
-
-        override fun setPointerIcon(pointerIcon: PointerIcon) = Unit
+    companion object {
+        val Empty: PlatformContext
+            get() = EmptyPlatformContext
     }
-
-    override val focusManager: FocusManager
-        get() = EmptyFocusManager
-
-    override fun requestFocus(): Boolean = false
 }
 
 internal class DefaultInputModeManager(
@@ -112,14 +86,35 @@ internal class DefaultInputModeManager(
         }
 }
 
-internal object EmptyViewConfiguration : ViewConfiguration {
+private object EmptyPlatformContext : PlatformContext {
+    override val windowInfo: WindowInfo = WindowInfoImpl().apply {
+        // true is a better default if platform doesn't provide WindowInfo.
+        // otherwise UI will be rendered always in unfocused mode
+        // (hidden textfield cursor, gray titlebar, etc)
+        isWindowFocused = true
+    }
+    override val viewConfiguration: ViewConfiguration = EmptyViewConfiguration
+    override val inputModeManager: InputModeManager = DefaultInputModeManager()
+    override val textInputService: PlatformTextInputService = EmptyPlatformTextInputService
+    override val textToolbar: TextToolbar = EmptyTextToolbar
+    override fun setPointerIcon(pointerIcon: PointerIcon) = Unit
+
+    override val rootForTestListener: PlatformContext.RootForTestListener? = null
+    override val accessibilityListener: PlatformContext.AccessibilityListener? = null
+    override val focusManager: FocusManager
+        get() = EmptyFocusManager
+
+    override fun requestFocus(): Boolean = false
+}
+
+private object EmptyViewConfiguration : ViewConfiguration {
     override val longPressTimeoutMillis: Long = 500
     override val doubleTapTimeoutMillis: Long = 300
     override val doubleTapMinTimeMillis: Long = 40
     override val touchSlop: Float = 18f
 }
 
-internal object EmptyPlatformTextInputService : PlatformTextInputService {
+private object EmptyPlatformTextInputService : PlatformTextInputService {
     override fun startInput(
         value: TextFieldValue,
         imeOptions: ImeOptions,
@@ -133,7 +128,7 @@ internal object EmptyPlatformTextInputService : PlatformTextInputService {
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) = Unit
 }
 
-internal object EmptyTextToolbar : TextToolbar {
+private object EmptyTextToolbar : TextToolbar {
     override fun hide() = Unit
     override val status: TextToolbarStatus = TextToolbarStatus.Hidden
     override fun showMenu(

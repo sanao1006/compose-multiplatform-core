@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.scene.CombinedComposeScene
 import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.scene.ComposeSceneContext
-import androidx.compose.ui.scene.EmptyComposeSceneContext
 import androidx.compose.ui.scene.toPointerKeyboardModifiers
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.PlatformTextInputService
@@ -150,15 +149,14 @@ internal abstract class ComposeBridge(
     }
 
     protected val windowInfo = WindowInfoImpl()
-    private val platformInput = PlatformInput(platformComponent)
+    private val desktopTextInputService = DesktopTextInputService(platformComponent)
     private val accessibilityListener = DesktopAccessibilityListener()
     protected val platformContext = DesktopPlatformContext()
 
     internal val scene = CombinedComposeScene(
         coroutineContext = MainUIDispatcher + coroutineExceptionHandler,
-        composeSceneContext = object : ComposeSceneContext by EmptyComposeSceneContext {
-            override val platformContext: PlatformContext
-                get() = this@ComposeBridge.platformContext
+        composeSceneContext = object : ComposeSceneContext by ComposeSceneContext.Empty {
+            override val platformContext get() = this@ComposeBridge.platformContext
         },
         density = Density(1f),
         layoutDirection = layoutDirection,
@@ -220,7 +218,7 @@ internal abstract class ComposeBridge(
             override fun inputMethodTextChanged(event: InputMethodEvent) {
                 if (isDisposed) return
                 catchExceptions {
-                    platformInput.inputMethodTextChanged(event)
+                    desktopTextInputService.inputMethodTextChanged(event)
                 }
             }
         })
@@ -284,7 +282,7 @@ internal abstract class ComposeBridge(
 
     private fun onKeyEvent(event: KeyEvent) = catchExceptions {
         if (isDisposed) return@catchExceptions
-        platformInput.onKeyEvent(event)
+        desktopTextInputService.onKeyEvent(event)
         setCurrentKeyboardModifiers(event.toPointerKeyboardModifiers())
         if (scene.sendKeyEvent(ComposeKeyEvent(event))) {
             event.consume()
@@ -362,23 +360,41 @@ internal abstract class ComposeBridge(
         keyboardModifiersRequireUpdate = true
     }
 
-    private inner class DesktopInputContext : PlatformContext.InputContext {
-        override val viewConfiguration = object : ViewConfiguration {
-            override val longPressTimeoutMillis: Long = 500
-            override val doubleTapTimeoutMillis: Long = 300
-            override val doubleTapMinTimeMillis: Long = 40
-            override val touchSlop: Float get() = with(platformComponent.density) { 18.dp.toPx() }
-        }
-        override val inputModeManager = DefaultInputModeManager()
-        override val textInputService: PlatformTextInputService =
-            PlatformInput(platformComponent)
-        override val textToolbar: TextToolbar get() = EmptyTextToolbar
+    private inner class DesktopViewConfiguration :
+        ViewConfiguration by PlatformContext.Empty.viewConfiguration {
+        override val touchSlop: Float get() = with(platformComponent.density) { 18.dp.toPx() }
+    }
 
-        override fun setPointerIcon(pointerIcon: PointerIcon) {
-            component.cursor =
-                (pointerIcon as? AwtCursor)?.cursor ?: Cursor(Cursor.DEFAULT_CURSOR)
+    private inner class DesktopFocusManager : FocusManager {
+        override fun clearFocus(force: Boolean) {
+            val root = component.rootPane
+            root?.focusTraversalPolicy?.getDefaultComponent(root)?.requestFocusInWindow()
         }
 
+        override fun moveFocus(focusDirection: FocusDirection): Boolean =
+            when (focusDirection) {
+                FocusDirection.Next -> {
+                    val toFocus = component.focusCycleRootAncestor?.let { root ->
+                        val policy = root.focusTraversalPolicy
+                        policy.getComponentAfter(root, component)
+                            ?: policy.getDefaultComponent(root)
+                    }
+                    val hasFocus = toFocus?.hasFocus() == true
+                    !hasFocus && toFocus?.requestFocusInWindow(FocusEvent.Cause.TRAVERSAL_FORWARD) == true
+                }
+
+                FocusDirection.Previous -> {
+                    val toFocus = component.focusCycleRootAncestor?.let { root ->
+                        val policy = root.focusTraversalPolicy
+                        policy.getComponentBefore(root, component)
+                            ?: policy.getDefaultComponent(root)
+                    }
+                    val hasFocus = toFocus?.hasFocus() == true
+                    !hasFocus && toFocus?.requestFocusInWindow(FocusEvent.Cause.TRAVERSAL_BACKWARD) == true
+                }
+
+                else -> false
+            }
     }
 
     private inner class DesktopAccessibilityListener : PlatformContext.AccessibilityListener {
@@ -405,43 +421,18 @@ internal abstract class ComposeBridge(
         }
     }
 
-    protected inner class DesktopPlatformContext : PlatformContext {
+    protected inner class DesktopPlatformContext : PlatformContext by PlatformContext.Empty {
         override val windowInfo: WindowInfo
             get() = this@ComposeBridge.windowInfo
-        override val inputContext: PlatformContext.InputContext =
-            DesktopInputContext()
-        override val focusManager = object : FocusManager {
-            override fun clearFocus(force: Boolean) {
-                val root = component.rootPane
-                root?.focusTraversalPolicy?.getDefaultComponent(root)?.requestFocusInWindow()
-            }
+        override val viewConfiguration: ViewConfiguration = DesktopViewConfiguration()
+        override val textInputService: PlatformTextInputService =
+            DesktopTextInputService(platformComponent)
 
-            override fun moveFocus(focusDirection: FocusDirection): Boolean =
-                when (focusDirection) {
-                    FocusDirection.Next -> {
-                        val toFocus = component.focusCycleRootAncestor?.let { root ->
-                            val policy = root.focusTraversalPolicy
-                            policy.getComponentAfter(root, component)
-                                ?: policy.getDefaultComponent(root)
-                        }
-                        val hasFocus = toFocus?.hasFocus() == true
-                        !hasFocus && toFocus?.requestFocusInWindow(FocusEvent.Cause.TRAVERSAL_FORWARD) == true
-                    }
-
-                    FocusDirection.Previous -> {
-                        val toFocus = component.focusCycleRootAncestor?.let { root ->
-                            val policy = root.focusTraversalPolicy
-                            policy.getComponentBefore(root, component)
-                                ?: policy.getDefaultComponent(root)
-                        }
-                        val hasFocus = toFocus?.hasFocus() == true
-                        !hasFocus && toFocus?.requestFocusInWindow(FocusEvent.Cause.TRAVERSAL_BACKWARD) == true
-                    }
-
-                    else -> false
-                }
+        override fun setPointerIcon(pointerIcon: PointerIcon) {
+            component.cursor =
+                (pointerIcon as? AwtCursor)?.cursor ?: Cursor(Cursor.DEFAULT_CURSOR)
         }
-
+        override val focusManager: FocusManager = DesktopFocusManager()
         override fun requestFocus(): Boolean {
             return component.hasFocus() || component.requestFocusInWindow()
         }

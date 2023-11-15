@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.scene.ComposeScenePointer
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import org.jetbrains.skiko.currentNanoTime
 
@@ -36,9 +37,9 @@ import org.jetbrains.skiko.currentNanoTime
 @InternalComposeUiApi
 interface PlatformRootForTest : RootForTest {
     /**
-     * See [WindowInfo.containerSize]
+     * TODO
      */
-    val containerSize: IntSize
+    val visibleBounds: IntRect
 
     /**
      * Whether the Owner has pending layout work.

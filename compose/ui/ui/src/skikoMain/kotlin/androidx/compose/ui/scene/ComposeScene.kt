@@ -83,6 +83,8 @@ interface ComposeScene {
 
     var bounds: IntRect
 
+    val composeSceneContext: ComposeSceneContext
+
     /**
      * Top-level composition locals, which will be provided for the Composable content, which is set by [setContent].
      *

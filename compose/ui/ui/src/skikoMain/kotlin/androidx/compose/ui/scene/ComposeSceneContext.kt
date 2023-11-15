@@ -18,7 +18,6 @@ package androidx.compose.ui.scene
 
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.platform.EmptyPlatformContext
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -32,11 +31,16 @@ interface ComposeSceneContext {
         layoutDirection: LayoutDirection,
         compositionContext: CompositionContext,
     ) : ComposeSceneLayer
+
+    companion object {
+        val Empty: ComposeSceneContext
+            get() = EmptyComposeSceneContext
+    }
 }
 
 @OptIn(InternalComposeUiApi::class)
-internal object EmptyComposeSceneContext : ComposeSceneContext {
-    override val platformContext: PlatformContext = EmptyPlatformContext()
+private object EmptyComposeSceneContext : ComposeSceneContext {
+    override val platformContext: PlatformContext = PlatformContext.Empty
 
     override fun createPlatformLayer(
         density: Density,

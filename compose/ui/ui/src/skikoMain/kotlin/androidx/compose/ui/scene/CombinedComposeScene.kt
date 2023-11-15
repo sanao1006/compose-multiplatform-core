@@ -38,7 +38,6 @@ import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.RootNodeOwner
 import androidx.compose.ui.platform.setContent
-import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -57,7 +56,7 @@ fun CombinedComposeScene(
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
     bounds: IntRect = IntRect.Zero,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
-    composeSceneContext: ComposeSceneContext = EmptyComposeSceneContext,
+    composeSceneContext: ComposeSceneContext = ComposeSceneContext.Empty,
     invalidate: () -> Unit = {},
 ): ComposeScene = CombinedComposeSceneImpl(
     density = density,
@@ -74,10 +73,11 @@ private class CombinedComposeSceneImpl(
     layoutDirection: LayoutDirection,
     bounds: IntRect,
     coroutineContext: CoroutineContext,
-    private val composeSceneContext: ComposeSceneContext,
+    composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
 ) : BaseComposeScene(
     coroutineContext = coroutineContext,
+    composeSceneContext = composeSceneContext,
     invalidate = invalidate
 ) {
     override var density: Density = density
@@ -146,8 +146,8 @@ private class CombinedComposeSceneImpl(
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
-        layers.fastForEach {
-            it.close()
+        forEachLayerReversed {
+            it?.close()
         }
         super.close()
     }

@@ -57,7 +57,7 @@ actual interface WindowInfo {
 
 
     @ExperimentalComposeUiApi
-    val isWindowTransparent: Boolean
+    val isWindowTransparent: Boolean get() = false // TODO
 }
 
 internal class WindowInfoImpl : WindowInfo {

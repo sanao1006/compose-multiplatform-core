@@ -43,6 +43,7 @@ import kotlin.jvm.Volatile
 @OptIn(InternalComposeUiApi::class)
 internal abstract class BaseComposeScene(
     coroutineContext: CoroutineContext,
+    override val composeSceneContext: ComposeSceneContext,
     private val invalidate: () -> Unit,
 ) : ComposeScene {
     protected val snapshotInvalidationTracker = SnapshotInvalidationTracker(::invalidateIfNeeded)

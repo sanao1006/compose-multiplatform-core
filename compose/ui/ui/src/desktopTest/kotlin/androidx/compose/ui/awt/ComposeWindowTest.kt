@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.scene.BaseComposeScene
+import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.sendMouseEvent
 import androidx.compose.ui.window.WindowExceptionHandler
 import androidx.compose.ui.unit.Constraints
@@ -153,7 +155,7 @@ class ComposeWindowTest {
                 window.pack()
                 assertThat(window.size).isEqualTo(Dimension(234, 345))
 
-                assertThat(window.scene.platform.windowInfo.containerSize)
+                assertThat(window.scene.windowInfo.containerSize)
                     .isEqualTo(IntSize(
                         width = (234 * window.density.density).toInt(),
                         height = (345 * window.density.density).toInt(),
@@ -184,7 +186,7 @@ class ComposeWindowTest {
                 assertThat(window.preferredSize).isEqualTo(Dimension(300, 400))
                 assertThat(window.size).isEqualTo(Dimension(300, 400))
 
-                assertThat(window.scene.platform.windowInfo.containerSize)
+                assertThat(window.scene.windowInfo.containerSize)
                     .isEqualTo(IntSize(
                         width = (300 * window.density.density).toInt(),
                         height = (400 * window.density.density).toInt(),
@@ -224,7 +226,7 @@ class ComposeWindowTest {
                     )
                 )
                 
-                assertThat(window.scene.platform.windowInfo.containerSize)
+                assertThat(window.scene.windowInfo.containerSize)
                     .isEqualTo(IntSize(
                         width = (300 * window.density.density).toInt(),
                         height = (400 * window.density.density).toInt(),
@@ -290,3 +292,6 @@ class ComposeWindowTest {
 
     private class TestException : Exception()
 }
+
+private val ComposeScene.windowInfo
+    get() = composeSceneContext.platformContext.windowInfo

@@ -75,6 +75,7 @@ import androidx.compose.ui.text.input.TextInputService
 import androidx.compose.ui.text.platform.FontLoader
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -173,7 +174,7 @@ private class RootNodeOwnerImpl(
     }
 
     override val inputModeManager: InputModeManager
-        get() = platformContext.inputContext.inputModeManager
+        get() = platformContext.inputModeManager
 
     override val modifierLocalManager = ModifierLocalManager(this)
 
@@ -206,7 +207,7 @@ private class RootNodeOwnerImpl(
     private val endApplyChangesListeners = mutableVectorOf<(() -> Unit)?>()
 
     override val textInputService = TextInputService(
-        platformTextInputService = platformContext.inputContext.textInputService
+        platformTextInputService = platformContext.textInputService
     )
 
     @Suppress("UNUSED_ANONYMOUS_PARAMETER")
@@ -232,7 +233,7 @@ private class RootNodeOwnerImpl(
     override val accessibilityManager = DefaultAccessibilityManager()
 
     override val textToolbar
-        get() = platformContext.inputContext.textToolbar
+        get() = platformContext.textToolbar
 
     override val semanticsOwner: SemanticsOwner = SemanticsOwner(root)
 
@@ -242,10 +243,10 @@ private class RootNodeOwnerImpl(
         get() = null
 
     override val viewConfiguration
-        get() = platformContext.inputContext.viewConfiguration
+        get() = platformContext.viewConfiguration
 
-    override val containerSize: IntSize
-         get() = windowInfo.containerSize
+    override val visibleBounds: IntRect
+        get() = bounds.intersect(IntRect(IntOffset.Zero, windowInfo.containerSize))
 
     override val hasPendingMeasureOrLayout: Boolean
         get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout
@@ -544,7 +545,7 @@ private class RootNodeOwnerImpl(
 
         override fun setIcon(value: PointerIcon?) {
             desiredPointerIcon = value
-            platformContext.inputContext.setPointerIcon(desiredPointerIcon ?: PointerIcon.Default)
+            platformContext.setPointerIcon(desiredPointerIcon ?: PointerIcon.Default)
         }
     }
 }

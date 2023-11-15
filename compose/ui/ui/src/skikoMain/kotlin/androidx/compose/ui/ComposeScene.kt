@@ -16,7 +16,6 @@
 
 package androidx.compose.ui
 
-import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import org.jetbrains.skia.Canvas as SkCanvas
 import androidx.compose.runtime.*
 import androidx.compose.ui.focus.FocusDirection
@@ -28,8 +27,6 @@ import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.scene.ComposeSceneContext
-import androidx.compose.ui.scene.ComposeSceneLayer
-import androidx.compose.ui.scene.EmptyComposeSceneContext
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.*
 import kotlin.coroutines.CoroutineContext
@@ -80,7 +77,7 @@ class ComposeScene internal constructor(
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
         invalidate: () -> Unit = {}
     ) : this(
-        textInputService = EmptyPlatformTextInputService,
+        textInputService = PlatformContext.Empty.textInputService,
         coroutineContext = coroutineContext,
         density = density,
         layoutDirection = layoutDirection,
@@ -108,10 +105,10 @@ class ComposeScene internal constructor(
         invalidate: () -> Unit = {}
     ) : this(
         coroutineContext = coroutineContext,
-        composeSceneContext = object : ComposeSceneContext by EmptyComposeSceneContext {
-            override val platformContext = EmptyPlatformContext(
-                textInputService = textInputService
-            )
+        composeSceneContext = object : ComposeSceneContext by ComposeSceneContext.Empty {
+            override val platformContext = object : PlatformContext by PlatformContext.Empty {
+                override val textInputService get() = textInputService
+            }
         },
         density = density,
         layoutDirection = layoutDirection,
@@ -133,7 +130,7 @@ class ComposeScene internal constructor(
         density: Density = Density(1f),
         invalidate: () -> Unit = {}
     ) : this(
-        textInputService = EmptyPlatformTextInputService,
+        textInputService = PlatformContext.Empty.textInputService,
         coroutineContext = coroutineContext,
         density = density,
         layoutDirection = LayoutDirection.Ltr,
@@ -296,7 +293,7 @@ class ComposeScene internal constructor(
      * Send [KeyEvent] to the content.
      * @return true if the event was consumed by the content
      */
-    fun sendKeyEvent(event: ComposeKeyEvent): Boolean {
+    fun sendKeyEvent(event: KeyEvent): Boolean {
         return replacement.sendKeyEvent(event)
     }
 

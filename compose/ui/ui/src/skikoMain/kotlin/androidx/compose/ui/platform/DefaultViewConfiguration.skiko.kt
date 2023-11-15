@@ -20,16 +20,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 
 @Deprecated("Used only for tests. In application code, use LocalViewConfiguration.current instead")
-class DefaultViewConfiguration(private val density: Density) : ViewConfiguration {
-    override val longPressTimeoutMillis: Long
-        get() = EmptyViewConfiguration.longPressTimeoutMillis
-
-    override val doubleTapTimeoutMillis: Long
-        get() = EmptyViewConfiguration.doubleTapTimeoutMillis
-
-    override val doubleTapMinTimeMillis: Long
-        get() = EmptyViewConfiguration.doubleTapMinTimeMillis
-
+class DefaultViewConfiguration(private val density: Density)
+    : ViewConfiguration by PlatformContext.Empty.viewConfiguration {
     override val touchSlop: Float
-        get() = with(density) { EmptyViewConfiguration.touchSlop.dp.toPx() }
+        get() = with(density) { PlatformContext.Empty.viewConfiguration.touchSlop.dp.toPx() }
 }
