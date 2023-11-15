@@ -199,7 +199,6 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
         }
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
     private fun createComposeBridge(): ComposeBridge {
         val renderOnGraphics = System.getProperty("compose.swing.render.on.graphics").toBoolean()
         val bridge: ComposeBridge = if (renderOnGraphics) {
@@ -240,7 +239,6 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
         }
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
     override fun removeNotify() {
         if (isDisposeOnRemove) {
             dispose()

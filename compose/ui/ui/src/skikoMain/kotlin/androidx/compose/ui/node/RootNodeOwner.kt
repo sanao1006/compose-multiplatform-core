@@ -87,6 +87,7 @@ internal interface RootNodeOwner {
     val contentSize: IntSize
 
     var bounds: IntRect
+    val platformContext: PlatformContext
 
     val semanticsOwner: SemanticsOwner
     val focusOwner: FocusOwner
@@ -137,7 +138,7 @@ private class RootNodeOwnerImpl(
     density: Density,
     layoutDirection: LayoutDirection,
     override val coroutineContext: CoroutineContext,
-    private val platformContext: PlatformContext,
+    override val platformContext: PlatformContext,
     override var constraints: Constraints,
     private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
     private val inputHandler: ComposeSceneInputHandler,
@@ -252,13 +253,11 @@ private class RootNodeOwnerImpl(
     init {
         snapshotObserver.startObserving()
         root.attach(this)
-        platformContext.accessibilityListener?.onSemanticsOwnerCreated(semanticsOwner)
         platformContext.rootForTestListener?.onRootForTestCreated(rootForTest)
     }
 
     override fun dispose() {
         platformContext.rootForTestListener?.onRootForTestDisposed(rootForTest)
-        platformContext.accessibilityListener?.onSemanticsOwnerDisposed(semanticsOwner)
         snapshotObserver.stopObserving()
         // we don't need to call root.detach() because root will be garbage collected
     }

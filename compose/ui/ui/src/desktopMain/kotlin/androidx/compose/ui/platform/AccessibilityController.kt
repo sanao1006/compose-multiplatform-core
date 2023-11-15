@@ -40,11 +40,11 @@ import kotlinx.coroutines.delay
  * @see ComposeSceneAccessible
  * @see ComposeAccessible
  */
-internal class AccessibilityControllerImpl(
-    private val owner: SemanticsOwner,
+internal class AccessibilityController(
+    val owner: SemanticsOwner,
     val desktopComponent: PlatformComponent,
     private val onFocusReceived: (ComposeAccessible) -> Unit
-) : AccessibilityController {
+) {
     private var currentNodesInvalidated = true
     var _currentNodes: Map<Int, ComposeAccessible> = emptyMap()
     val currentNodes: Map<Int, ComposeAccessible>
@@ -151,7 +151,7 @@ internal class AccessibilityControllerImpl(
         SyncLoopState.lastAccessTimeMillis = System.currentTimeMillis()
     }
 
-    override suspend fun syncLoop() {
+    suspend fun syncLoop() {
         while (true) {
             if (currentNodesInvalidated && SyncLoopState.shouldSync) {
                 syncNodes()
@@ -196,11 +196,7 @@ internal class AccessibilityControllerImpl(
         currentNodesInvalidated = false
     }
 
-    override fun onLayoutChange(layoutNode: LayoutNode) {
-        currentNodesInvalidated = true
-    }
-
-    override fun onSemanticsChange() {
+    fun onSemanticsChange() {
         currentNodesInvalidated = true
     }
 

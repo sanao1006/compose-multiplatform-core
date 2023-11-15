@@ -64,8 +64,7 @@ interface PlatformContext {
     }
 
     interface AccessibilityListener {
-        fun onSemanticsOwnerCreated(semanticsOwner: SemanticsOwner)
-        fun onSemanticsOwnerDisposed(semanticsOwner: SemanticsOwner)
+        suspend fun onSemanticsOwner(semanticsOwner: SemanticsOwner)
 
         fun onSemanticsChange(semanticsOwner: SemanticsOwner)
     }

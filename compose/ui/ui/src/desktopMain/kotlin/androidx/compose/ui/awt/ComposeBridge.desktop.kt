@@ -14,24 +14,23 @@
  * limitations under the License.
  */
 
-@file:OptIn(ExperimentalComposeUiApi::class)
-
 package androidx.compose.ui.awt
 
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalContext
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.ComposeScene
+import androidx.compose.ui.scene.CombinedComposeScene
+import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.scene.ComposeSceneContext
 import androidx.compose.ui.scene.EmptyComposeSceneContext
 import androidx.compose.ui.scene.toPointerKeyboardModifiers
+import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -45,6 +44,7 @@ import java.awt.Cursor
 import java.awt.event.*
 import java.awt.event.KeyEvent
 import java.awt.im.InputMethodRequests
+import java.util.*
 import javax.accessibility.Accessible
 import javax.swing.JComponent
 import kotlin.coroutines.AbstractCoroutineContextElement
@@ -131,7 +131,6 @@ internal abstract class ComposeBridge(
 
     protected abstract fun disposeComponentLayer()
 
-    @OptIn(ExperimentalComposeUiApi::class)
     private val coroutineExceptionHandler = object :
         AbstractCoroutineContextElement(CoroutineExceptionHandler), CoroutineExceptionHandler {
         override fun handleException(context: CoroutineContext, exception: Throwable) {
@@ -139,10 +138,8 @@ internal abstract class ComposeBridge(
         }
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
     var exceptionHandler: WindowExceptionHandler? = null
 
-    @OptIn(ExperimentalComposeUiApi::class)
     private fun catchExceptions(body: () -> Unit) {
         try {
             body()
@@ -153,10 +150,10 @@ internal abstract class ComposeBridge(
 
     protected val windowInfo = WindowInfoImpl()
     private val platformInput = PlatformInput(platformComponent)
+    private val accessibilityListener = DesktopAccessibilityListener()
     protected val platformContext = DesktopPlatformContext()
 
-    @OptIn(InternalComposeUiApi::class)
-    internal val scene = ComposeScene(
+    internal val scene = CombinedComposeScene(
         coroutineContext = MainUIDispatcher + coroutineExceptionHandler,
         composeSceneContext = object : ComposeSceneContext by EmptyComposeSceneContext {
             override val platformContext: PlatformContext
@@ -169,7 +166,9 @@ internal abstract class ComposeBridge(
         },
     )
 
-    val sceneAccessible = ComposeSceneAccessible(scene)
+    val sceneAccessible = ComposeSceneAccessible {
+        accessibilityListener.accessibilityControllers
+    }
 
     var compositionLocalContext: CompositionLocalContext? by scene::compositionLocalContext
 
@@ -179,16 +178,19 @@ internal abstract class ComposeBridge(
 
         override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
             catchExceptions {
-                scene.render(canvas, nanoTime)
+                scene.render(canvas.asComposeCanvas(), nanoTime)
             }
         }
     }
 
     protected val sceneDimension: Dimension
-        get() = Dimension(
-            (scene.contentSize.width / component.density.density).toInt(),
-            (scene.contentSize.height / component.density.density).toInt()
-        )
+        get() {
+            val contentSize = scene.calculateContentSize()
+            return Dimension(
+                (contentSize.width / component.density.density).toInt(),
+                (contentSize.height / component.density.density).toInt()
+            )
+        }
 
     private val density get() = platformComponent.density.density
 
@@ -205,7 +207,6 @@ internal abstract class ComposeBridge(
      */
     private var keyboardModifiersRequireUpdate = false
 
-    @OptIn(ExperimentalComposeUiApi::class)
     protected fun attachComposeToComponent() {
         component.enableInputMethods(false)
         component.addInputMethodListener(object : InputMethodListener {
@@ -363,7 +364,6 @@ internal abstract class ComposeBridge(
         keyboardModifiersRequireUpdate = true
     }
 
-    @OptIn(InternalComposeUiApi::class)
     private inner class DesktopInputContext : PlatformContext.InputContext {
         override val viewConfiguration = object : ViewConfiguration {
             override val longPressTimeoutMillis: Long = 500
@@ -383,7 +383,30 @@ internal abstract class ComposeBridge(
 
     }
 
-    @OptIn(InternalComposeUiApi::class)
+    private inner class DesktopAccessibilityListener : PlatformContext.AccessibilityListener {
+        val accessibilityControllers = LinkedList<AccessibilityController>()
+
+        override suspend fun onSemanticsOwner(semanticsOwner: SemanticsOwner) {
+            val accessibilityController = AccessibilityController(
+                owner = semanticsOwner,
+                desktopComponent = platformComponent,
+                onFocusReceived = {
+                    requestNativeFocusOnAccessible(it)
+                }
+            )
+            accessibilityControllers.push(accessibilityController)
+            try {
+                accessibilityController.syncLoop()
+            } finally {
+                accessibilityControllers.remove(accessibilityController)
+            }
+        }
+
+        override fun onSemanticsChange(semanticsOwner: SemanticsOwner) {
+            accessibilityControllers.firstOrNull { it.owner == semanticsOwner }?.onSemanticsChange()
+        }
+    }
+
     protected inner class DesktopPlatformContext : PlatformContext {
         override val windowInfo: WindowInfo
             get() = this@ComposeBridge.windowInfo
@@ -428,7 +451,7 @@ internal abstract class ComposeBridge(
         override val rootForTestListener: PlatformContext.RootForTestListener?
             get() = null
         override val accessibilityListener: PlatformContext.AccessibilityListener?
-            get() = null
+            get() = this@ComposeBridge.accessibilityListener
     }
 
     private class InvisibleComponent : Component() {

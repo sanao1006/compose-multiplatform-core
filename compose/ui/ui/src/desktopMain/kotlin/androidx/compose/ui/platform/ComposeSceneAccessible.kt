@@ -16,7 +16,6 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.ui.ComposeScene
 import androidx.compose.ui.platform.ComposeSceneAccessible.ComposeSceneAccessibleContext
 import java.awt.*
 import java.awt.event.FocusListener
@@ -42,7 +41,7 @@ import javax.accessibility.*
  * @see ComposeAccessible
  */
 internal class ComposeSceneAccessible(
-    private val scene: ComposeScene
+    private val provider: () -> List<AccessibilityController>,
 ) : Accessible {
     private val a11yDisabled by lazy {
         System.getProperty("compose.accessibility.enable") == "false" ||
@@ -50,7 +49,7 @@ internal class ComposeSceneAccessible(
     }
 
     private val accessibleContext by lazy {
-        ComposeSceneAccessibleContext(scene)
+        ComposeSceneAccessibleContext()
     }
 
     override fun getAccessibleContext(): AccessibleContext? {
@@ -60,20 +59,12 @@ internal class ComposeSceneAccessible(
         return accessibleContext
     }
 
-    private class ComposeSceneAccessibleContext(
-        private val scene: ComposeScene
-    ) : AccessibleContext(), AccessibleComponent {
-        private val accessibilityControllers: List<AccessibilityControllerImpl>
-            get() =
-                // TODO
-                // scene.mainOwner?.accessibilityControllers?.filterIsInstance<AccessibilityControllerImpl>() ?:
-            emptyList()
+    private inner class ComposeSceneAccessibleContext : AccessibleContext(), AccessibleComponent {
+        private val accessibilityControllers: List<AccessibilityController>
+            get() = provider()
 
-        private val accessibilityController: AccessibilityControllerImpl?
-            get() = null
-        // TODO
-        //scene.mainOwner?.accessibilityController as? AccessibilityControllerImpl
-
+        private val accessibilityController: AccessibilityController?
+            get() = accessibilityControllers.firstOrNull()
 
         private fun getMainOwnerAccessibleRoot(): ComposeAccessible? {
             return accessibilityController?.rootAccessible
