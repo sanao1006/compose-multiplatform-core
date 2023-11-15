@@ -86,7 +86,7 @@ internal class WindowComposeBridge(
         get() = component.transparency
         set(value) {
             component.transparency = value
-            windowInfo.isWindowTransparent = value
+            platformContext.isWindowTransparent = value
         }
 
     init {

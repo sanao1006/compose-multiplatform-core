@@ -148,7 +148,7 @@ internal abstract class ComposeBridge(
         }
     }
 
-    protected val windowInfo = WindowInfoImpl()
+    private val windowInfo = WindowInfoImpl()
     private val desktopTextInputService = DesktopTextInputService(platformComponent)
     private val accessibilityListener = DesktopAccessibilityListener()
     protected val platformContext = DesktopPlatformContext()
@@ -297,22 +297,24 @@ internal abstract class ComposeBridge(
         isDisposed = true
     }
 
-    fun setContent(
+    fun setKeyEventListener(
         onPreviewKeyEvent: (ComposeKeyEvent) -> Boolean = { false },
         onKeyEvent: (ComposeKeyEvent) -> Boolean = { false },
-        content: @Composable () -> Unit
     ) {
+        scene.setKeyEventListener(
+            onPreviewKeyEvent = onPreviewKeyEvent,
+            onKeyEvent = onKeyEvent
+        )
+    }
+
+
+    fun setContent(content: @Composable () -> Unit) {
         // If we call it before attaching, everything probably will be fine,
         // but the first composition will be useless, as we set density=1
         // (we don't know the real density if we have unattached component)
         _initContent = {
             catchExceptions {
-                scene.setContent(
-                    // TODO
-//                    onPreviewKeyEvent = onPreviewKeyEvent,
-//                    onKeyEvent = onKeyEvent,
-                    content = content
-                )
+                scene.setContent(content)
             }
         }
         initContent()
@@ -360,8 +362,7 @@ internal abstract class ComposeBridge(
         keyboardModifiersRequireUpdate = true
     }
 
-    private inner class DesktopViewConfiguration :
-        ViewConfiguration by PlatformContext.Empty.viewConfiguration {
+    private inner class DesktopViewConfiguration : ViewConfiguration by EmptyViewConfiguration {
         override val touchSlop: Float get() = with(platformComponent.density) { 18.dp.toPx() }
     }
 
@@ -422,8 +423,8 @@ internal abstract class ComposeBridge(
     }
 
     protected inner class DesktopPlatformContext : PlatformContext by PlatformContext.Empty {
-        override val windowInfo: WindowInfo
-            get() = this@ComposeBridge.windowInfo
+        override val windowInfo: WindowInfo get() = this@ComposeBridge.windowInfo
+        override var isWindowTransparent: Boolean = false
         override val viewConfiguration: ViewConfiguration = DesktopViewConfiguration()
         override val textInputService: PlatformTextInputService =
             DesktopTextInputService(platformComponent)

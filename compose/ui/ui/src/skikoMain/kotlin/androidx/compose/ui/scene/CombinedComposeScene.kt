@@ -440,11 +440,8 @@ private class CombinedComposeSceneImpl(
                 }
             }
 
-        private val windowInfo
-            get() = composeSceneContext.platformContext.windowInfo
-
         private val dialogScrimBlendMode
-            get() = if (windowInfo.isWindowTransparent) {
+            get() = if (composeSceneContext.platformContext.isWindowTransparent) {
                 // Use background alpha channel to respect transparent window shape.
                 BlendMode.SrcAtop
             } else {

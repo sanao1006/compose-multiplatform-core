@@ -145,10 +145,10 @@ internal class ComposeWindowDelegate(
         modifier: Modifier = Modifier,
         content: @Composable () -> Unit
     ) {
-        bridge.setContent(
+        bridge.setKeyEventListener(
             onPreviewKeyEvent = onPreviewKeyEvent,
-            onKeyEvent = onKeyEvent,
-        ) {
+            onKeyEvent = onKeyEvent,)
+        bridge.setContent {
             CompositionLocalProvider(
                 LocalWindow provides window,
                 LocalLayerContainer provides _pane

@@ -24,29 +24,18 @@ import androidx.compose.ui.unit.LayoutDirection
 
 @InternalComposeUiApi
 interface ComposeSceneContext {
-    val platformContext: PlatformContext
+    val platformContext: PlatformContext get() = PlatformContext.Empty
 
     fun createPlatformLayer(
         density: Density,
         layoutDirection: LayoutDirection,
         compositionContext: CompositionContext,
-    ) : ComposeSceneLayer
+    ) : ComposeSceneLayer {
+        throw IllegalStateException()
+    }
 
     companion object {
-        val Empty: ComposeSceneContext
-            get() = EmptyComposeSceneContext
-    }
-}
-
-@OptIn(InternalComposeUiApi::class)
-private object EmptyComposeSceneContext : ComposeSceneContext {
-    override val platformContext: PlatformContext = PlatformContext.Empty
-
-    override fun createPlatformLayer(
-        density: Density,
-        layoutDirection: LayoutDirection,
-        compositionContext: CompositionContext
-    ): ComposeSceneLayer {
-        throw IllegalStateException()
+        val Empty = object : ComposeSceneContext {
+        }
     }
 }

@@ -105,7 +105,7 @@ class ComposeScene internal constructor(
         invalidate: () -> Unit = {}
     ) : this(
         coroutineContext = coroutineContext,
-        composeSceneContext = object : ComposeSceneContext by ComposeSceneContext.Empty {
+        composeSceneContext = object : ComposeSceneContext {
             override val platformContext = object : PlatformContext by PlatformContext.Empty {
                 override val textInputService get() = textInputService
             }

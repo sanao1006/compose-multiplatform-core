@@ -40,19 +40,21 @@ import androidx.compose.ui.text.input.TextFieldValue
 @InternalComposeUiApi
 interface PlatformContext {
     val windowInfo: WindowInfo
-    // TODO val isWindowTransparent: Boolean
+    var isWindowTransparent: Boolean
+        get() = false
+        set(_) {}
 
-    val viewConfiguration: ViewConfiguration
+    val viewConfiguration: ViewConfiguration get() = EmptyViewConfiguration
     val inputModeManager: InputModeManager
-    val textInputService: PlatformTextInputService
-    val textToolbar: TextToolbar
-    fun setPointerIcon(pointerIcon: PointerIcon)
+    val textInputService: PlatformTextInputService get() = EmptyPlatformTextInputService
+    val textToolbar: TextToolbar get() = EmptyTextToolbar
+    fun setPointerIcon(pointerIcon: PointerIcon) = Unit
 
-    val focusManager: FocusManager
-    fun requestFocus(): Boolean
+    val focusManager: FocusManager get() = EmptyFocusManager
+    fun requestFocus(): Boolean = false
 
-    val rootForTestListener: RootForTestListener?
-    val accessibilityListener: AccessibilityListener?
+    val rootForTestListener: RootForTestListener? get() = null
+    val accessibilityListener: AccessibilityListener? get() = null
 
     interface RootForTestListener {
         fun onRootForTestCreated(root: PlatformRootForTest)
@@ -66,8 +68,15 @@ interface PlatformContext {
     }
 
     companion object {
-        val Empty: PlatformContext
-            get() = EmptyPlatformContext
+        val Empty = object : PlatformContext {
+            override val windowInfo: WindowInfo = WindowInfoImpl().apply {
+                // true is a better default if platform doesn't provide WindowInfo.
+                // otherwise UI will be rendered always in unfocused mode
+                // (hidden textfield cursor, gray titlebar, etc)
+                isWindowFocused = true
+            }
+            override val inputModeManager: InputModeManager = DefaultInputModeManager()
+        }
     }
 }
 
@@ -86,28 +95,7 @@ internal class DefaultInputModeManager(
         }
 }
 
-private object EmptyPlatformContext : PlatformContext {
-    override val windowInfo: WindowInfo = WindowInfoImpl().apply {
-        // true is a better default if platform doesn't provide WindowInfo.
-        // otherwise UI will be rendered always in unfocused mode
-        // (hidden textfield cursor, gray titlebar, etc)
-        isWindowFocused = true
-    }
-    override val viewConfiguration: ViewConfiguration = EmptyViewConfiguration
-    override val inputModeManager: InputModeManager = DefaultInputModeManager()
-    override val textInputService: PlatformTextInputService = EmptyPlatformTextInputService
-    override val textToolbar: TextToolbar = EmptyTextToolbar
-    override fun setPointerIcon(pointerIcon: PointerIcon) = Unit
-
-    override val rootForTestListener: PlatformContext.RootForTestListener? = null
-    override val accessibilityListener: PlatformContext.AccessibilityListener? = null
-    override val focusManager: FocusManager
-        get() = EmptyFocusManager
-
-    override fun requestFocus(): Boolean = false
-}
-
-private object EmptyViewConfiguration : ViewConfiguration {
+internal object EmptyViewConfiguration : ViewConfiguration {
     override val longPressTimeoutMillis: Long = 500
     override val doubleTapTimeoutMillis: Long = 300
     override val doubleTapMinTimeMillis: Long = 40

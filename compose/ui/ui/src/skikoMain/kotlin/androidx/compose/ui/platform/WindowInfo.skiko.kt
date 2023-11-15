@@ -54,10 +54,6 @@ actual interface WindowInfo {
      */
     @ExperimentalComposeUiApi
     val containerSize: IntSize get() = IntSize.Zero
-
-
-    @ExperimentalComposeUiApi
-    val isWindowTransparent: Boolean get() = false // TODO
 }
 
 internal class WindowInfoImpl : WindowInfo {
@@ -68,9 +64,6 @@ internal class WindowInfoImpl : WindowInfo {
 
     @ExperimentalComposeUiApi
     override var containerSize: IntSize by mutableStateOf(IntSize.Zero)
-
-    @ExperimentalComposeUiApi
-    override var isWindowTransparent: Boolean by mutableStateOf(false)
 
     companion object {
         // One instance across all windows makes sense, since the state of KeyboardModifiers is
