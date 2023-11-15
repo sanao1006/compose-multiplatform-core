@@ -125,7 +125,6 @@ private class SimpleComposeSceneImpl(
             { compositionLocalContext },
             content = content
         )
-        // TODO: Set LocalComposeScene
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent) =
