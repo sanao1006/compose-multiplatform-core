@@ -102,10 +102,9 @@ internal abstract class BaseComposeScene(
 
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
-        isClosed = true
-
         composition?.dispose()
         recomposer.cancel()
+        isClosed = true
     }
 
     override fun hasInvalidations(): Boolean = hasPendingDraws || recomposer.hasPendingWork

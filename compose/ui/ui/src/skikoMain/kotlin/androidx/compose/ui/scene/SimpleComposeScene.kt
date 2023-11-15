@@ -97,8 +97,9 @@ private class SimpleComposeSceneImpl(
         get() = mainOwner.semanticsOwner
 
     override fun close() {
-        super.close()
+        check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
+        super.close()
     }
 
     override fun calculateContentSize(): IntSize {

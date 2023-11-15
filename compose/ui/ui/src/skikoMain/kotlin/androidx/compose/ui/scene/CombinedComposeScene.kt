@@ -153,11 +153,12 @@ private class CombinedComposeSceneImpl(
         get() = attachedLayers.lastOrNull { it.focusable }?.owner ?: mainOwner
 
     override fun close() {
-        super.close()
+        check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
         attachedLayers.fastForEach {
             it.dispose()
         }
+        super.close()
     }
 
     override fun calculateContentSize(): IntSize {
@@ -358,7 +359,7 @@ private class CombinedComposeSceneImpl(
     }
 
     private fun detach(layer: AttachedComposeSceneLayer) {
-        if (isClosed) return
+        check(!isClosed) { "ComposeScene is closed" }
         owners.remove(layer.owner)
 
         if (layer.owner == focusedOwner) {
