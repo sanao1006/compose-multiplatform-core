@@ -90,11 +90,7 @@ internal abstract class BaseComposeScene(
 
     override var compositionLocalContext: CompositionLocalContext? by mutableStateOf(null)
 
-    /**
-     * The mouse cursor position or null if cursor is not inside a scene.
-     */
-    internal val lastKnownCursorPosition: Offset?
-        get() = inputHandler.lastKnownCursorPosition
+    override val lastKnownCursorPosition by inputHandler::lastKnownCursorPosition
 
     init {
         GlobalSnapshotManager.ensureStarted()

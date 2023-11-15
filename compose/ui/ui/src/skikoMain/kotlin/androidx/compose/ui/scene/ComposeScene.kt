@@ -97,6 +97,11 @@ interface ComposeScene {
     var compositionLocalContext: CompositionLocalContext?
 
     /**
+     * The mouse cursor position or null if cursor is not inside a scene.
+     */
+    val lastKnownCursorPosition: Offset?
+
+    /**
      * Semantics owner that owns [SemanticsNode] objects and notifies listeners of changes to the
      * semantics tree.
      */

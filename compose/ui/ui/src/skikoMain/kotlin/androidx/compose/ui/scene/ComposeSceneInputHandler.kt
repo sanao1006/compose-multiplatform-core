@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.scene
 
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.ComposeScene
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEvent
@@ -42,7 +43,7 @@ internal class ComposeSceneInputHandler(
     private val processKeyEvent: (KeyEvent) -> Boolean,
 ) {
     private val defaultPointerStateTracker = DefaultPointerStateTracker()
-    private val pointerPositions = mutableMapOf<PointerId, Offset>()
+    private val pointerPositions = mutableStateMapOf<PointerId, Offset>()
     private val syntheticEventSender = SyntheticEventSender(processPointerInputEvent)
 
     /**
