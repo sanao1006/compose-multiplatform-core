@@ -104,6 +104,10 @@ private class SimpleComposeSceneImpl(
     override val focusManager: ComposeSceneFocusManager =
         ComposeSceneFocusManagerImpl()
 
+    init {
+        mainOwner.focusOwner.takeFocus()
+    }
+
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()

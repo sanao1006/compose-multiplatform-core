@@ -146,6 +146,10 @@ private class CombinedComposeSceneImpl(
     private var gestureOwner: RootNodeOwner? = null
     private var lastHoverOwner: RootNodeOwner? = null
 
+    init {
+        onOwnerAdded(mainOwner)
+    }
+
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
@@ -364,6 +368,23 @@ private class CombinedComposeSceneImpl(
         compositionContext = compositionContext,
     )
 
+    private fun onOwnerAdded(owner: RootNodeOwner) = with(owner.focusOwner) {
+        if (isFocused) {
+            takeFocus()
+        } else {
+            releaseFocus()
+        }
+    }
+
+    private fun onOwnerRemoved(owner: RootNodeOwner) {
+        if (owner == lastHoverOwner) {
+            lastHoverOwner = null
+        }
+        if (owner == gestureOwner) {
+            gestureOwner = null
+        }
+    }
+
     private fun attach(layer: AttachedComposeSceneLayer) {
         check(!isClosed) { "ComposeScene is closed" }
         layers.add(layer)
@@ -371,13 +392,8 @@ private class CombinedComposeSceneImpl(
         if (layer.focusable) {
             requestFocus(layer)
         }
-        with(layer.owner.focusOwner) {
-            if (isFocused) {
-                takeFocus()
-            } else {
-                releaseFocus()
-            }
-        }
+        onOwnerAdded(layer.owner)
+
         inputHandler.onPointerUpdate()
         invalidateIfNeeded()
     }
@@ -387,12 +403,8 @@ private class CombinedComposeSceneImpl(
         layers.remove(layer)
 
         releaseFocus(layer)
-        if (layer.owner == lastHoverOwner) {
-            lastHoverOwner = null
-        }
-        if (layer.owner == gestureOwner) {
-            gestureOwner = null
-        }
+        onOwnerRemoved(layer.owner)
+
         inputHandler.onPointerUpdate()
         invalidateIfNeeded()
     }
