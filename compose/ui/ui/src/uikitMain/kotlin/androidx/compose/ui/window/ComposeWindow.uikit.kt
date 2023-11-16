@@ -244,7 +244,7 @@ internal actual class ComposeWindow : UIViewController {
             val keyboardInfo = userInfo[UIKeyboardFrameEndUserInfoKey] as NSValue
             val keyboardHeight = keyboardInfo.CGRectValue().useContents { size.height }
             if (configuration.onFocusBehavior == OnFocusBehavior.FocusableAboveKeyboard) {
-                val focusedRect = scene.getFocusRect()?.toDpRect(density)
+                val focusedRect = scene.focusManager.getFocusRect()?.toDpRect(density)
 
                 if (focusedRect != null) {
                     updateViewBounds(

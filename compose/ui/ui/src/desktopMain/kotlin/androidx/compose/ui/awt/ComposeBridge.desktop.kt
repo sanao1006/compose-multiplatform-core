@@ -229,7 +229,7 @@ internal abstract class ComposeBridge(
                 // Partially because we don't support restoring focus after clearing it.
                 // Focus can be lost temporary when another window or popup takes focus.
                 if (!e.isTemporary) {
-                    scene.requestFocus()
+                    scene.focusManager.requestFocus()
                 }
             }
 
@@ -238,7 +238,7 @@ internal abstract class ComposeBridge(
                 // Partially because we don't support restoring focus after clearing it.
                 // Focus can be lost temporary when another window or popup takes focus.
                 if (!e.isTemporary) {
-                    scene.releaseFocus()
+                    scene.focusManager.releaseFocus()
                 }
             }
         })

@@ -208,7 +208,7 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
             WindowComposeBridge(skiaLayerAnalytics, layoutDirectionFor(this))
         }
         return bridge.apply {
-            scene.releaseFocus()
+            scene.focusManager.releaseFocus()
             component.setSize(width, height)
             component.isFocusable = _isFocusable
             component.isRequestFocusEnabled = _isRequestFocusEnabled
@@ -219,14 +219,14 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
                     // The focus can be switched from the child component inside SwingPanel.
                     // In that case, SwingPanel will take care of it.
                     if (!isParentOf(e.oppositeComponent)) {
-                        bridge.scene.requestFocus()
+                        bridge.scene.focusManager.requestFocus()
                         when (e.cause) {
                             FocusEvent.Cause.TRAVERSAL_FORWARD -> {
-                                bridge.scene.moveFocus(FocusDirection.Next)
+                                bridge.scene.focusManager.moveFocus(FocusDirection.Next)
                             }
 
                             FocusEvent.Cause.TRAVERSAL_BACKWARD -> {
-                                bridge.scene.moveFocus(FocusDirection.Previous)
+                                bridge.scene.focusManager.moveFocus(FocusDirection.Previous)
                             }
 
                             else -> Unit

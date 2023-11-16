@@ -26,6 +26,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -97,6 +98,8 @@ interface ComposeScene {
      * The mouse cursor position or null if cursor is not inside a scene.
      */
     val lastKnownPointerPosition: Offset?
+
+    val focusManager: ComposeSceneFocusManager
 
     /**
      * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
@@ -215,29 +218,6 @@ interface ComposeScene {
 
     // FIXME: To be removed. Temporary hack for iOS interop
     fun hitTestInteropView(position: Offset): Boolean
-
-    /**
-     * Call this function to clear focus from the currently focused component, and set the focus to
-     * the root focus modifier.
-     */
-    fun releaseFocus()
-
-    fun requestFocus()
-
-    /**
-     * Moves focus in the specified [direction][FocusDirection].
-     *
-     * If you are not satisfied with the default focus order, consider setting a custom order using
-     * [Modifier.focusProperties].
-     *
-     * @return true if focus was moved successfully. false if the focused item is unchanged.
-     */
-    fun moveFocus(focusDirection: FocusDirection): Boolean
-
-    /**
-     * Searches for the currently focused item, and returns its coordinates as a rect.
-     */
-    fun getFocusRect(): Rect?
 
     fun createLayer(
         density: Density,

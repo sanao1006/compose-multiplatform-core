@@ -81,6 +81,16 @@ private class CombinedComposeSceneImpl(
     composeSceneContext = composeSceneContext,
     invalidate = invalidate
 ) {
+    private val mainOwner = RootNodeOwner(
+        density = density,
+        layoutDirection = layoutDirection,
+        bounds = bounds,
+        coroutineContext = compositionContext.effectCoroutineContext,
+        platformContext = composeSceneContext.platformContext,
+        snapshotInvalidationTracker = snapshotInvalidationTracker,
+        inputHandler = inputHandler,
+    )
+
     override var density: Density = density
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
@@ -102,19 +112,11 @@ private class CombinedComposeSceneImpl(
             mainOwner.bounds = bounds
         }
 
-    private val mainOwner = RootNodeOwner(
-        density = density,
-        layoutDirection = layoutDirection,
-        bounds = bounds,
-        coroutineContext = compositionContext.effectCoroutineContext,
-        platformContext = composeSceneContext.platformContext,
-        snapshotInvalidationTracker = snapshotInvalidationTracker,
-        inputHandler = inputHandler,
-    )
+    override val focusManager: ComposeSceneFocusManager =
+        ComposeSceneFocusManagerImpl()
 
-    private val layers = mutableListOf<AttachedComposeSceneLayer>()
     private var isFocused = true
-
+    private val layers = mutableListOf<AttachedComposeSceneLayer>()
     private val _layersCopyCache = CopiedList {
         it.add(null)
         for (layer in layers) {
@@ -352,24 +354,6 @@ private class CombinedComposeSceneImpl(
         }
     }
 
-    override fun releaseFocus() {
-        forEachOwner { it.focusOwner.releaseFocus() }
-        isFocused = false
-    }
-
-    override fun requestFocus() {
-        focusedOwner.focusOwner.takeFocus()
-        isFocused = true
-    }
-
-    override fun moveFocus(focusDirection: FocusDirection): Boolean {
-        return focusedOwner.focusOwner.moveFocus(focusDirection)
-    }
-
-    override fun getFocusRect(): Rect? {
-        return focusedOwner.focusOwner.getFocusRect()
-    }
-
     override fun createLayer(
         density: Density,
         layoutDirection: LayoutDirection,
@@ -431,6 +415,22 @@ private class CombinedComposeSceneImpl(
         }
         inputHandler.onPointerUpdate()
         invalidateIfNeeded()
+    }
+
+    private inner class ComposeSceneFocusManagerImpl : ComposeSceneFocusManager {
+        private val focusOwner get() = focusedOwner.focusOwner
+        override fun requestFocus() {
+            focusOwner.takeFocus()
+            isFocused = true
+        }
+        override fun releaseFocus() {
+            forEachOwner { it.focusOwner.releaseFocus() }
+            isFocused = false
+        }
+        override fun getFocusRect(): Rect? = focusOwner.getFocusRect()
+        override fun clearFocus(force: Boolean) = focusOwner.clearFocus(force)
+        override fun moveFocus(focusDirection: FocusDirection): Boolean =
+            focusOwner.moveFocus(focusDirection)
     }
 
     private inner class AttachedComposeSceneLayer(

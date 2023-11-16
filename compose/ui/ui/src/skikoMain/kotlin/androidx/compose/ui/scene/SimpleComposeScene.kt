@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
@@ -100,6 +101,9 @@ private class SimpleComposeSceneImpl(
             mainOwner.bounds = bounds
         }
 
+    override val focusManager: ComposeSceneFocusManager =
+        ComposeSceneFocusManagerImpl()
+
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
@@ -149,22 +153,6 @@ private class SimpleComposeSceneImpl(
         mainOwner.draw(canvas)
     }
 
-    override fun releaseFocus() {
-        mainOwner.focusOwner.releaseFocus()
-    }
-
-    override fun requestFocus() {
-        mainOwner.focusOwner.takeFocus()
-    }
-
-    override fun moveFocus(focusDirection: FocusDirection): Boolean {
-        return mainOwner.focusOwner.moveFocus(focusDirection)
-    }
-
-    override fun getFocusRect(): Rect? {
-        return mainOwner.focusOwner.getFocusRect()
-    }
-
     override fun createLayer(
         density: Density,
         layoutDirection: LayoutDirection,
@@ -174,4 +162,14 @@ private class SimpleComposeSceneImpl(
         layoutDirection = layoutDirection,
         compositionContext = compositionContext
     )
+
+    private inner class ComposeSceneFocusManagerImpl : ComposeSceneFocusManager {
+        private val focusOwner get() = mainOwner.focusOwner
+        override fun requestFocus() = focusOwner.takeFocus()
+        override fun releaseFocus() = focusOwner.releaseFocus()
+        override fun getFocusRect(): Rect? = focusOwner.getFocusRect()
+        override fun clearFocus(force: Boolean) = focusOwner.clearFocus(force)
+        override fun moveFocus(focusDirection: FocusDirection): Boolean =
+            focusOwner.moveFocus(focusDirection)
+    }
 }
