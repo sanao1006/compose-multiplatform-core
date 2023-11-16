@@ -21,12 +21,15 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyInputElement
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.node.RootNodeOwner
 import androidx.compose.ui.platform.setContent
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -116,7 +119,8 @@ private class SimpleComposeSceneImpl(
     }
 
     override fun calculateContentSize(): IntSize {
-        TODO("Not yet implemented")
+        check(!isClosed) { "ComposeScene is closed" }
+        return mainOwner.measureInConstraints(Constraints())
     }
 
     override fun createComposition(content: @Composable () -> Unit): Composition {
@@ -125,6 +129,10 @@ private class SimpleComposeSceneImpl(
             { compositionLocalContext },
             content = content
         )
+    }
+
+    override fun hitTestInteropView(position: Offset): Boolean {
+        return mainOwner.hitTestInteropView(position)
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent) =
@@ -151,6 +159,10 @@ private class SimpleComposeSceneImpl(
 
     override fun moveFocus(focusDirection: FocusDirection): Boolean {
         return mainOwner.focusOwner.moveFocus(focusDirection)
+    }
+
+    override fun getFocusRect(): Rect? {
+        return mainOwner.focusOwner.getFocusRect()
     }
 
     override fun createLayer(

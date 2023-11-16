@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
@@ -166,7 +167,7 @@ private class CombinedComposeSceneImpl(
 
     override fun calculateContentSize(): IntSize {
         check(!isClosed) { "ComposeScene is closed" }
-        return mainOwner.measureInConstraints(Constraints()) ?: IntSize.Zero
+        return mainOwner.measureInConstraints(Constraints())
     }
 
     override fun createComposition(content: @Composable () -> Unit): Composition {
@@ -175,6 +176,25 @@ private class CombinedComposeSceneImpl(
             { compositionLocalContext },
             content = content
         )
+    }
+
+    override fun hitTestInteropView(position: Offset): Boolean {
+        // TODO:
+        //  Temporary solution copying control flow from [processPress].
+        //  A proper solution is to send touches to scene as black box
+        //  and handle only that ones that were received in interop view
+        //  instead of using [pointInside].
+        forEachLayerReversed { layer ->
+            if (layer == null || layer.isInBounds(position)) {
+                val owner = layer?.owner ?: mainOwner
+                return owner.hitTestInteropView(position)
+            } else if (layer == focusedLayer) {
+                return false
+            }
+        }
+
+        // We didn't pass isInBounds check for any owner 🤷
+        return false
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent) {
@@ -344,6 +364,10 @@ private class CombinedComposeSceneImpl(
 
     override fun moveFocus(focusDirection: FocusDirection): Boolean {
         return focusedOwner.focusOwner.moveFocus(focusDirection)
+    }
+
+    override fun getFocusRect(): Rect? {
+        return focusedOwner.focusOwner.getFocusRect()
     }
 
     override fun createLayer(

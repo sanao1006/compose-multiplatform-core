@@ -16,28 +16,36 @@
 
 package androidx.compose.ui.native
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.ComposeScene
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.toCompose
-import androidx.compose.ui.platform.Platform
+import androidx.compose.ui.platform.PlatformContext
+import androidx.compose.ui.scene.CombinedComposeScene
+import androidx.compose.ui.scene.ComposeSceneContext
+import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.unit.Density
-import org.jetbrains.skia.Canvas
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.DpRect
-import androidx.compose.ui.unit.toDpRect
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.Dispatchers
-import org.jetbrains.skia.Point
-import org.jetbrains.skiko.*
+import org.jetbrains.skia.Canvas
+import org.jetbrains.skiko.SkiaLayer
+import org.jetbrains.skiko.SkikoInput
+import org.jetbrains.skiko.SkikoKeyboardEvent
+import org.jetbrains.skiko.SkikoPointerEvent
+import org.jetbrains.skiko.SkikoPointerEventKind
+import org.jetbrains.skiko.SkikoView
+import org.jetbrains.skiko.currentNanoTime
 
 internal class ComposeLayer(
     internal val layer: SkiaLayer,
-    platform: Platform,
+    platformContext: PlatformContext,
     private val input: SkikoInput,
 ) {
     private var isDisposed = false
@@ -45,11 +53,11 @@ internal class ComposeLayer(
     // Should be set to an actual value by ComposeWindow implementation
     private var density = Density(1f)
 
-    inner class ComponentImpl : SkikoView {
+    private inner class ComponentImpl : SkikoView {
         override val input = this@ComposeLayer.input
 
         override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
-            scene.render(canvas, nanoTime)
+            scene.render(canvas.asComposeCanvas(), nanoTime)
         }
 
         override fun onKeyboardEvent(event: SkikoKeyboardEvent) {
@@ -57,7 +65,6 @@ internal class ComposeLayer(
             scene.sendKeyEvent(KeyEvent(event))
         }
 
-        @OptIn(ExperimentalComposeUiApi::class)
         override fun onPointerEvent(event: SkikoPointerEvent) {
             if (supportsMultitouch) {
                 onPointerEventWithMultitouch(event)
@@ -74,7 +81,7 @@ internal class ComposeLayer(
             scene.sendPointerEvent(
                 eventType = event.kind.toCompose(),
                 pointers = event.pointers.map {
-                    ComposeScene.Pointer(
+                    ComposeScenePointer(
                         id = PointerId(it.id),
                         position = Offset(
                             x = it.x.toFloat() * scale,
@@ -112,9 +119,11 @@ internal class ComposeLayer(
         layer.skikoView = view
     }
 
-    private val scene = ComposeScene(
+    private val scene = CombinedComposeScene(
         coroutineContext = Dispatchers.Main,
-        platform = platform,
+        composeSceneContext = object : ComposeSceneContext {
+            override val platformContext get() = platformContext
+        },
         density = density,
         invalidate = layer::needRedraw,
     )
@@ -133,14 +142,9 @@ internal class ComposeLayer(
     }
 
     fun setSize(width: Int, height: Int) {
-        scene.constraints = Constraints(maxWidth = width, maxHeight = height)
+        scene.bounds = IntRect(IntOffset.Zero, IntSize(width, height))
 
         layer.needRedraw()
-    }
-
-    fun getActiveFocusRect(): DpRect? {
-        val focusRect = scene.mainOwner?.focusOwner?.getFocusRect() ?: return null
-        return focusRect.toDpRect(density)
     }
 
     fun setContent(
@@ -152,11 +156,11 @@ internal class ComposeLayer(
         // but the first composition will be useless, as we set density=1
         // (we don't know the real density if we have unattached component)
         _initContent = {
-            scene.setContent(
+            scene.setKeyEventListener(
                 onPreviewKeyEvent = onPreviewKeyEvent,
-                onKeyEvent = onKeyEvent,
-                content = content
+                onKeyEvent = onKeyEvent
             )
+            scene.setContent(content)
         }
 
         initContent()

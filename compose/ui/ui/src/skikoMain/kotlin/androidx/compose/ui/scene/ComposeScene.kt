@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.PointerButton
@@ -212,6 +213,9 @@ interface ComposeScene {
      */
     fun sendKeyEvent(keyEvent: KeyEvent): Boolean
 
+    // FIXME: To be removed. Temporary hack for iOS interop
+    fun hitTestInteropView(position: Offset): Boolean
+
     /**
      * Call this function to clear focus from the currently focused component, and set the focus to
      * the root focus modifier.
@@ -229,6 +233,11 @@ interface ComposeScene {
      * @return true if focus was moved successfully. false if the focused item is unchanged.
      */
     fun moveFocus(focusDirection: FocusDirection): Boolean
+
+    /**
+     * Searches for the currently focused item, and returns its coordinates as a rect.
+     */
+    fun getFocusRect(): Rect?
 
     fun createLayer(
         density: Density,

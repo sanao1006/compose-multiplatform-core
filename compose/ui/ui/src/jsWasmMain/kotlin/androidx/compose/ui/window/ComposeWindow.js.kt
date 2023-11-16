@@ -26,7 +26,7 @@ import androidx.compose.ui.input.pointer.BrowserCursor
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.native.ComposeLayer
 import androidx.compose.ui.platform.JSTextInputService
-import androidx.compose.ui.platform.Platform
+import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.unit.Density
@@ -56,25 +56,25 @@ internal actual class ComposeWindow(val canvasId: String)  {
         isWindowFocused = true
     }
     private val jsTextInputService = JSTextInputService()
-    val platform = object : Platform by Platform.Empty {
-        override val windowInfo get() = _windowInfo
-        override val textInputService = jsTextInputService
-        override val viewConfiguration = object : ViewConfiguration {
-            override val longPressTimeoutMillis: Long = 500
-            override val doubleTapTimeoutMillis: Long = 300
-            override val doubleTapMinTimeMillis: Long = 40
-            override val touchSlop: Float get() = with(density) { 18.dp.toPx() }
-        }
+    private val platformContext: PlatformContext =
+        object : PlatformContext by PlatformContext.Empty {
+            override val windowInfo get() = _windowInfo
+            override val textInputService = jsTextInputService
+            override val viewConfiguration =
+                object : ViewConfiguration by PlatformContext.Empty.viewConfiguration {
+                    override val touchSlop: Float get() = with(density) { 18.dp.toPx() }
+                }
 
-        override fun setPointerIcon(pointerIcon: PointerIcon) {
-            if (pointerIcon is BrowserCursor) {
-                setCursor(canvasId, pointerIcon.id)
+            override fun setPointerIcon(pointerIcon: PointerIcon) {
+                if (pointerIcon is BrowserCursor) {
+                    setCursor(canvasId, pointerIcon.id)
+                }
             }
         }
-    }
+
     private val layer = ComposeLayer(
         layer = SkiaLayer(),
-        platform = platform,
+        platformContext = platformContext,
         input = jsTextInputService.input
     )
     private val systemThemeObserver = SystemThemeObserver(window)

@@ -196,6 +196,9 @@ internal class RootNodeOwner(
         return focusOwner.dispatchKeyEvent(keyEvent)
     }
 
+    /**
+     * If pointerPosition is inside UIKitView, then Compose skip touches. And touches goes to UIKit.
+     */
     fun hitTestInteropView(position: Offset): Boolean {
         val result = HitTestResult()
         owner.root.hitTest(position, result, true)
