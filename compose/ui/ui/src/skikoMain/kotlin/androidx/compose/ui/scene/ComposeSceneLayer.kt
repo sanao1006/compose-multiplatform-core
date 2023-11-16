@@ -51,6 +51,8 @@ interface ComposeSceneLayer {
 
     var focusable: Boolean
 
+    fun initialize()
+
     /**
      * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
      * longer needed will cause a memory leak.
@@ -85,7 +87,9 @@ interface ComposeSceneLayer {
 
 @OptIn(InternalComposeUiApi::class)
 @Composable
-internal fun rememberComposeSceneLayer(): ComposeSceneLayer {
+internal fun rememberComposeSceneLayer(
+    focusable: Boolean = false
+): ComposeSceneLayer {
     val scene = LocalComposeScene.requireCurrent()
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -95,7 +99,11 @@ internal fun rememberComposeSceneLayer(): ComposeSceneLayer {
             density = density,
             layoutDirection = layoutDirection,
             compositionContext = parentComposition,
-        )
+        ).also {
+            // It's important to set some state before first invalidation
+            it.focusable = focusable
+            it.initialize()
+        }
     }
     DisposableEffect(Unit) {
         onDispose {

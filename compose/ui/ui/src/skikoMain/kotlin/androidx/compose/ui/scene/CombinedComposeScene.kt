@@ -459,7 +459,7 @@ private class CombinedComposeSceneImpl(
             } ?: Modifier
         private var keyInput: Modifier by mutableStateOf(Modifier)
 
-        init {
+        override fun initialize() {
             attach(this)
         }
 

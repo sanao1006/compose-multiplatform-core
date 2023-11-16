@@ -428,7 +428,9 @@ private fun PopupLayout(
     val platformInsets = properties.insetsConfig.safeInsets
     var layoutParentBoundsInWindow: IntRect? by remember { mutableStateOf(null) }
     EmptyLayout(Modifier.parentBoundsInWindow { layoutParentBoundsInWindow = it })
-    val layer = rememberComposeSceneLayer()
+    val layer = rememberComposeSceneLayer(
+        focusable = properties.focusable
+    )
     layer.focusable = properties.focusable
     layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
     layer.setOutsidePointerEventListener(onOutsidePointerEvent)
