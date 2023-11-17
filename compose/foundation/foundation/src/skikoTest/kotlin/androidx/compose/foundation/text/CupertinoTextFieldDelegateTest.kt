@@ -34,10 +34,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class CupertinoTextFieldDelegateTest {
-    private val sampleText = "aaaa bbb cccc dd e fffffffff?????????!!!!!!!          ...\n" + "ggggggg tttt\n" +
-        "Family emoji: \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66, and some text at the end\n" +
-        "Split family emoji: \uD83D\uDC68 \uD83D\uDC69 \uD83D\uDC67 \uD83D\uDC66, and some text at the end\n" +
-        "Emoji sequence: \uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\n"
+    private val sampleText =
+        "aaaa bbb cccc dd e fffffffff?????????!!!!!!!          ...\n" + "ggggggg tttt\n" +
+            "Family emoji: \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66, and some text at the end\n" +
+            "Split family emoji: \uD83D\uDC68 \uD83D\uDC69 \uD83D\uDC67 \uD83D\uDC66, and some text at the end\n" +
+            "Emoji sequence: \uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\n"
     private val defaultDensity = Density(density = 1f)
     private val fontFamilyResolver = createFontFamilyResolver()
 

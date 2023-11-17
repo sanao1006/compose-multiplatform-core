@@ -99,29 +99,31 @@ private val PUSH_DIRECTIONAL_ISOLATE_RANGE: IntRange = 0x2066..0x2068
  */
 private const val POP_DIRECTIONAL_ISOLATE_CODE_POINT: Int = 0x2069
 
-private val String.codePointsOutsideDirectionalIsolate get() = sequence {
-    var openIsolateCount = 0
-    for (codePoint in codePoints) {
-        if (codePoint in PUSH_DIRECTIONAL_ISOLATE_RANGE) {
-            openIsolateCount++
-        } else if (codePoint == POP_DIRECTIONAL_ISOLATE_CODE_POINT) {
-            if (openIsolateCount > 0) {
-                openIsolateCount--
+private val String.codePointsOutsideDirectionalIsolate
+    get() = sequence {
+        var openIsolateCount = 0
+        for (codePoint in codePoints) {
+            if (codePoint in PUSH_DIRECTIONAL_ISOLATE_RANGE) {
+                openIsolateCount++
+            } else if (codePoint == POP_DIRECTIONAL_ISOLATE_CODE_POINT) {
+                if (openIsolateCount > 0) {
+                    openIsolateCount--
+                }
+            } else if (openIsolateCount == 0) {
+                yield(codePoint)
             }
-        } else if (openIsolateCount == 0) {
-            yield(codePoint)
         }
     }
-}
 
-internal val String.codePoints get() = sequence {
-    var index = 0
-    while (index < length) {
-        val codePoint = codePointAt(index)
-        yield(codePoint)
-        index += codePoint.charCount()
+internal val String.codePoints
+    get() = sequence {
+        var index = 0
+        while (index < length) {
+            val codePoint = codePointAt(index)
+            yield(codePoint)
+            index += codePoint.charCount()
+        }
     }
-}
 
 /**
  * Returns the character (Unicode code point) at the specified index.
@@ -168,17 +170,23 @@ fun findNextNonWhitespaceSymbolsSubsequenceStartOffset(
     /* Assume that next non whitespaces symbols subsequence (word) is when current char is whitespace and next character is not.
      * Emoji (compound incl.) should be treated as a new word.
      */
-    val charIterator = BreakIterator.makeCharacterInstance() // wordInstance doesn't consider symbols sequence as word
+    val charIterator =
+        BreakIterator.makeCharacterInstance() // wordInstance doesn't consider symbols sequence as word
     charIterator.setText(currentText)
 
     var currentOffset: Int
     var nextOffset = charIterator.next()
-    while (nextOffset < offset) { nextOffset = charIterator.next() }
+    while (nextOffset < offset) {
+        nextOffset = charIterator.next()
+    }
     currentOffset = nextOffset
 
     while (nextOffset != BreakIterator.DONE) {
         nextOffset = charIterator.next()
-        if (currentText.codePointAt(currentOffset).isWhitespace() && !currentText.codePointAt(nextOffset).isWhitespace()) {
+        if (currentText.codePointAt(currentOffset).isWhitespace() && !currentText.codePointAt(
+                nextOffset
+            ).isWhitespace()
+        ) {
             return currentOffset
         } else {
             currentOffset = nextOffset
@@ -223,13 +231,17 @@ fun String.halfSymbolsOffset(): Int {
 
 private fun CodePoint.isWhitespace(): Boolean {
     // TODO: Extend this behavior when (if) Unicode will have compound whitespace characters.
-    if (this.charCount() != 1) { return false }
+    if (this.charCount() != 1) {
+        return false
+    }
     return this.toChar().isWhitespace()
 }
 
 private fun CodePoint.isPunctuation(): Boolean {
     // TODO: Extend this behavior when (if) Unicode will have compound punctuation characters.
-    if (this.charCount() != 1) { return false }
+    if (this.charCount() != 1) {
+        return false
+    }
     val punctuationSet = setOf(
         CharCategory.DASH_PUNCTUATION,
         CharCategory.START_PUNCTUATION,

@@ -128,7 +128,10 @@ private fun isPunctuationOrSpaceTapped(
 }
 
 @OptIn(ExperimentalTextApi::class)
-private fun TextLayoutResultProxy.isFirstHalfOfWordTapped(caretOffset: Int, currentText: String): Boolean {
+private fun TextLayoutResultProxy.isFirstHalfOfWordTapped(
+    caretOffset: Int,
+    currentText: String
+): Boolean {
     val wordBoundary = value.getWordBoundary(caretOffset)
     val word = currentText.substring(wordBoundary.start, wordBoundary.end)
     val middleIndex = wordBoundary.start + word.halfSymbolsOffset()
