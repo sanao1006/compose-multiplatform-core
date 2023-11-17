@@ -44,7 +44,6 @@ import java.awt.Cursor
 import java.awt.event.*
 import java.awt.event.KeyEvent
 import java.awt.im.InputMethodRequests
-import java.util.*
 import javax.accessibility.Accessible
 import javax.swing.JComponent
 import kotlin.coroutines.AbstractCoroutineContextElement
@@ -150,11 +149,12 @@ internal abstract class ComposeBridge(
 
     private val windowInfo = WindowInfoImpl()
     private val desktopTextInputService = DesktopTextInputService(platformComponent)
-    private val accessibilityListener = DesktopAccessibilityListener()
+    private val accessibilityListener = DesktopSemanticsOwnerListener()
     protected val platformContext = DesktopPlatformContext()
 
+    private val sceneCoroutineContext = MainUIDispatcher + coroutineExceptionHandler
     internal val scene = CombinedComposeScene(
-        coroutineContext = MainUIDispatcher + coroutineExceptionHandler,
+        coroutineContext = sceneCoroutineContext,
         composeSceneContext = object : ComposeSceneContext by ComposeSceneContext.Empty {
             override val platformContext get() = this@ComposeBridge.platformContext
         },
@@ -410,27 +410,32 @@ internal abstract class ComposeBridge(
             }
     }
 
-    private inner class DesktopAccessibilityListener : PlatformContext.AccessibilityListener {
-        val accessibilityControllers = LinkedList<AccessibilityController>()
+    private inner class DesktopSemanticsOwnerListener : PlatformContext.SemanticsOwnerListener {
+        // Keep insertion-order via linked map
+        private val _accessibilityControllers = linkedMapOf<SemanticsOwner, AccessibilityController>()
+        val accessibilityControllers get() = _accessibilityControllers.values.toList()
 
-        override suspend fun onSemanticsOwner(semanticsOwner: SemanticsOwner) {
+        override fun onSemanticsOwnerCreated(semanticsOwner: SemanticsOwner) {
             val accessibilityController = AccessibilityController(
                 owner = semanticsOwner,
                 desktopComponent = platformComponent,
+                coroutineContext = sceneCoroutineContext,
                 onFocusReceived = {
                     requestNativeFocusOnAccessible(it)
                 }
             )
-            accessibilityControllers.push(accessibilityController)
-            try {
-                accessibilityController.syncLoop()
-            } finally {
-                accessibilityControllers.remove(accessibilityController)
-            }
+            _accessibilityControllers[semanticsOwner] = accessibilityController
+            accessibilityController.syncLoop()
+        }
+
+        override fun onSemanticsOwnerDisposed(semanticsOwner: SemanticsOwner) {
+            val accessibilityController = _accessibilityControllers[semanticsOwner] ?: return
+            _accessibilityControllers.remove(semanticsOwner)
+            accessibilityController.dispose()
         }
 
         override fun onSemanticsChange(semanticsOwner: SemanticsOwner) {
-            accessibilityControllers.firstOrNull { it.owner == semanticsOwner }?.onSemanticsChange()
+            _accessibilityControllers[semanticsOwner]?.onSemanticsChange()
         }
     }
 
@@ -452,7 +457,7 @@ internal abstract class ComposeBridge(
 
         override val rootForTestListener: PlatformContext.RootForTestListener?
             get() = null
-        override val accessibilityListener: PlatformContext.AccessibilityListener?
+        override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener?
             get() = this@ComposeBridge.accessibilityListener
     }
 

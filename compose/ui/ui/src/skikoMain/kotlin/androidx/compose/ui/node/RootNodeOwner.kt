@@ -127,9 +127,11 @@ internal class RootNodeOwner(
         snapshotObserver.startObserving()
         owner.root.attach(owner)
         platformContext.rootForTestListener?.onRootForTestCreated(rootForTest)
+        platformContext.semanticsOwnerListener?.onSemanticsOwnerCreated(semanticsOwner)
     }
 
     fun dispose() {
+        platformContext.semanticsOwnerListener?.onSemanticsOwnerDisposed(semanticsOwner)
         platformContext.rootForTestListener?.onRootForTestDisposed(rootForTest)
         snapshotObserver.stopObserving()
         // we don't need to call root.detach() because root will be garbage collected
@@ -330,11 +332,11 @@ internal class RootNodeOwner(
         )
 
         override fun onSemanticsChange() {
-            platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
+            platformContext.semanticsOwnerListener?.onSemanticsChange(semanticsOwner)
         }
 
         override fun onLayoutChange(layoutNode: LayoutNode) {
-            platformContext.accessibilityListener?.onSemanticsChange(semanticsOwner)
+            platformContext.semanticsOwnerListener?.onSemanticsChange(semanticsOwner)
         }
 
         override fun getFocusDirection(keyEvent: KeyEvent): FocusDirection? {

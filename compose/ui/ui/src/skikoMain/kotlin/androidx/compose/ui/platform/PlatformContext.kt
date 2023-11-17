@@ -54,15 +54,16 @@ interface PlatformContext {
     fun requestFocus(): Boolean = false
 
     val rootForTestListener: RootForTestListener? get() = null
-    val accessibilityListener: AccessibilityListener? get() = null
+    val semanticsOwnerListener: SemanticsOwnerListener? get() = null
 
     interface RootForTestListener {
         fun onRootForTestCreated(root: PlatformRootForTest)
         fun onRootForTestDisposed(root: PlatformRootForTest)
     }
 
-    interface AccessibilityListener {
-        suspend fun onSemanticsOwner(semanticsOwner: SemanticsOwner)
+    interface SemanticsOwnerListener {
+        fun onSemanticsOwnerCreated(semanticsOwner: SemanticsOwner)
+        fun onSemanticsOwnerDisposed(semanticsOwner: SemanticsOwner)
 
         fun onSemanticsChange(semanticsOwner: SemanticsOwner)
     }

@@ -50,9 +50,6 @@ internal fun RootNodeOwner.setContent(
                 uriHandler = remember { PlatformUriHandler() },
                 content = content
             )
-            LaunchedEffect(owner) {
-                platformContext.accessibilityListener?.onSemanticsOwner(semanticsOwner)
-            }
         }
     }
     return composition
