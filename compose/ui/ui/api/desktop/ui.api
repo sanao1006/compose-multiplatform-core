@@ -3021,6 +3021,15 @@ public final class androidx/compose/ui/platform/CompositionLocalsKt {
 	public static final fun getLocalWindowInfo ()Landroidx/compose/runtime/ProvidableCompositionLocal;
 }
 
+public final class androidx/compose/ui/platform/DefaultViewConfiguration : androidx/compose/ui/platform/ViewConfiguration {
+	public static final field $stable I
+	public fun <init> (Landroidx/compose/ui/unit/Density;)V
+	public fun getDoubleTapMinTimeMillis ()J
+	public fun getDoubleTapTimeoutMillis ()J
+	public fun getLongPressTimeoutMillis ()J
+	public fun getTouchSlop ()F
+}
+
 public abstract interface class androidx/compose/ui/platform/InfiniteAnimationPolicy : kotlin/coroutines/CoroutineContext$Element {
 	public static final field Key Landroidx/compose/ui/platform/InfiniteAnimationPolicy$Key;
 	public fun getKey ()Lkotlin/coroutines/CoroutineContext$Key;
