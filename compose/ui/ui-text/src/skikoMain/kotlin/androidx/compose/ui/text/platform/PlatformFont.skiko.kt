@@ -73,7 +73,12 @@ class LoadedFont internal constructor(
 ) : PlatformFont() {
     @ExperimentalTextApi
     override val loadingStrategy: FontLoadingStrategy = FontLoadingStrategy.Blocking
-    val data: ByteArray by lazy { getData() }
+
+    @Deprecated(
+        message = "Use getData() instead",
+        replaceWith = ReplaceWith(expression = "this.getData()")
+    )
+    val data: ByteArray get() = getData()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
