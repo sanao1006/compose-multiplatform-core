@@ -160,10 +160,12 @@ private class SimpleComposeSceneImpl(
     override fun createLayer(
         density: Density,
         layoutDirection: LayoutDirection,
+        focusable: Boolean,
         compositionContext: CompositionContext,
     ): ComposeSceneLayer = composeSceneContext.createPlatformLayer(
         density = density,
         layoutDirection = layoutDirection,
+        focusable = focusable,
         compositionContext = compositionContext
     )
 

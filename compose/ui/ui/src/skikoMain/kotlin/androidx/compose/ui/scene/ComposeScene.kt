@@ -222,6 +222,7 @@ interface ComposeScene {
     fun createLayer(
         density: Density,
         layoutDirection: LayoutDirection,
+        focusable: Boolean,
         compositionContext: CompositionContext,
     ): ComposeSceneLayer
 }

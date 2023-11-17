@@ -431,7 +431,6 @@ private fun PopupLayout(
     val layer = rememberComposeSceneLayer(
         focusable = properties.focusable
     )
-    layer.focusable = properties.focusable
     layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
     layer.setOutsidePointerEventListener(onOutsidePointerEvent)
     layer.setContent {

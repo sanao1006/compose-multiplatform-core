@@ -51,8 +51,6 @@ interface ComposeSceneLayer {
 
     var focusable: Boolean
 
-    fun initialize()
-
     /**
      * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
      * longer needed will cause a memory leak.
@@ -98,13 +96,11 @@ internal fun rememberComposeSceneLayer(
         scene.createLayer(
             density = density,
             layoutDirection = layoutDirection,
+            focusable = focusable,
             compositionContext = parentComposition,
-        ).also {
-            // It's important to set some state before first invalidation
-            it.focusable = focusable
-            it.initialize()
-        }
+        )
     }
+    layer.focusable = focusable
     DisposableEffect(Unit) {
         onDispose {
             layer.close()

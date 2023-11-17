@@ -29,6 +29,7 @@ interface ComposeSceneContext {
     fun createPlatformLayer(
         density: Density,
         layoutDirection: LayoutDirection,
+        focusable: Boolean,
         compositionContext: CompositionContext,
     ) : ComposeSceneLayer {
         throw IllegalStateException()

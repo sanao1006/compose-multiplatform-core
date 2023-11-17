@@ -361,10 +361,12 @@ private class CombinedComposeSceneImpl(
     override fun createLayer(
         density: Density,
         layoutDirection: LayoutDirection,
+        focusable: Boolean,
         compositionContext: CompositionContext,
     ): ComposeSceneLayer = AttachedComposeSceneLayer(
         density = density,
         layoutDirection = layoutDirection,
+        focusable = focusable,
         compositionContext = compositionContext,
     )
 
@@ -415,8 +417,6 @@ private class CombinedComposeSceneImpl(
 
             // Exit event to lastHoverOwner will be sent via synthetic event on next frame
         }
-        inputHandler.onPointerUpdate()
-        invalidateIfNeeded()
     }
 
     private fun releaseFocus(layer: AttachedComposeSceneLayer) {
@@ -425,8 +425,6 @@ private class CombinedComposeSceneImpl(
 
             // Enter event to new focusedOwner will be sent via synthetic event on next frame
         }
-        inputHandler.onPointerUpdate()
-        invalidateIfNeeded()
     }
 
     private inner class ComposeSceneFocusManagerImpl : ComposeSceneFocusManager {
@@ -448,6 +446,7 @@ private class CombinedComposeSceneImpl(
     private inner class AttachedComposeSceneLayer(
         density: Density,
         layoutDirection: LayoutDirection,
+        focusable: Boolean,
         private val compositionContext: CompositionContext,
     ) : ComposeSceneLayer {
         val owner = RootNodeOwner(
@@ -466,7 +465,7 @@ private class CombinedComposeSceneImpl(
         override var layoutDirection: LayoutDirection by owner::layoutDirection
         override var bounds: IntRect by mutableStateOf(this@CombinedComposeSceneImpl.bounds)
         override var scrimColor: Color? by mutableStateOf(null)
-        override var focusable: Boolean = false
+        override var focusable: Boolean = focusable
             set(value) {
                 field = value
                 if (value) {
@@ -474,6 +473,8 @@ private class CombinedComposeSceneImpl(
                 } else {
                     releaseFocus(this)
                 }
+                inputHandler.onPointerUpdate()
+                invalidateIfNeeded()
             }
 
         private val dialogScrimBlendMode
@@ -495,7 +496,7 @@ private class CombinedComposeSceneImpl(
             } ?: Modifier
         private var keyInput: Modifier by mutableStateOf(Modifier)
 
-        override fun initialize() {
+        init {
             attach(this)
         }
 

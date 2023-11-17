@@ -170,8 +170,9 @@ private fun DialogLayout(
     content: @Composable () -> Unit
 ) {
     val platformInsets = properties.insetsConfig.safeInsets
-    val layer = rememberComposeSceneLayer()
-    layer.focusable = true
+    val layer = rememberComposeSceneLayer(
+        focusable = true
+    )
     layer.scrimColor = properties.scrimColor
     layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
     layer.setOutsidePointerEventListener(onOutsidePointerEvent)

@@ -393,14 +393,6 @@ class SkikoComposeUiTest(
 
     private inner class TestComposeSceneContext : ComposeSceneContext {
         override val platformContext = TestContext()
-
-        override fun createPlatformLayer(
-            density: Density,
-            layoutDirection: LayoutDirection,
-            compositionContext: CompositionContext
-        ): ComposeSceneLayer {
-            throw IllegalStateException()
-        }
     }
 }
 
