@@ -182,7 +182,20 @@ internal abstract class ComposeBridge(
         }
     }
 
-    protected val sceneDimension: Dimension
+    /**
+     * Provides the size of ComposeScene content inside infinity constraints
+     *
+     * This is needed for the bridge between Compose and Swing since
+     * in some cases, Swing's LayoutManagers need
+     * to calculate the preferred size of the content without max/min constraints
+     * to properly lay it out.
+     *
+     * Example: Compose content inside Popup without a preferred size.
+     * Swing will calculate the preferred size of the Compose content and set Popup's side for that.
+     *
+     * See [androidx.compose.ui.awt.ComposePanelTest] test `initial panel size of LazyColumn with border layout`
+     */
+    protected val scenePreferredSize: Dimension
         get() {
             val contentSize = scene.calculateContentSize()
             return Dimension(

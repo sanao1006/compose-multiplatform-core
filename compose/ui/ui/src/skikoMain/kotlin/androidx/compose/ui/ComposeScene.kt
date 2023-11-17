@@ -207,8 +207,20 @@ class ComposeScene internal constructor(
     /**
      * Returns the current content size
      */
+    @Deprecated("Use calculateContentSize() instead", replaceWith = ReplaceWith("calculateContentSize()"))
     val contentSize: IntSize
         get() = replacement.calculateContentSize()
+
+    /**
+     * Returns the current content size in infinity constraints.
+     *
+     * @throws IllegalStateException when [ComposeScene] content has lazy layouts without maximum size bounds
+     * (e.g. LazyColumn without maximum height).
+     */
+    @ExperimentalComposeUiApi
+    fun calculateContentSize(): IntSize {
+        return replacement.calculateContentSize()
+    }
 
     /**
      * Close all resources and subscriptions. Not calling this method when [ComposeScene] is no
