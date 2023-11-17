@@ -134,7 +134,7 @@ private class SkiaBackedTypeface(
  * @see FontFamily
  */
 @Deprecated(
-    "Use Font with lazy getData argument instead",
+    message = "Use Font with lazy getData argument instead",
     replaceWith = ReplaceWith(
         "Font(identity, getData = { data }, weight, style)",
         "androidx.compose.ui.text.platform.Font"
