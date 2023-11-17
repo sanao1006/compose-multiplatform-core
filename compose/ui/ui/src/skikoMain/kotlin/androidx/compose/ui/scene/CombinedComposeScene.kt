@@ -460,6 +460,7 @@ private class CombinedComposeSceneImpl(
         )
         private var composition: Composition? = null
         private var callback: ((Boolean) -> Unit)? = null
+        private var isClosed = false
 
         override var density: Density by owner::density
         override var layoutDirection: LayoutDirection by owner::layoutDirection
@@ -501,9 +502,12 @@ private class CombinedComposeSceneImpl(
         }
 
         override fun close() {
+            if (isClosed) return
             detach(this)
             composition?.dispose()
+            composition = null
             owner.dispose()
+            isClosed = true
         }
 
         override fun setKeyEventListener(

@@ -122,6 +122,7 @@ internal class RootNodeOwner(
     private val snapshotObserver = snapshotInvalidationTracker.snapshotObserver()
     private val pointerInputEventProcessor = PointerInputEventProcessor(owner.root)
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(owner.root)
+    private var isDisposed = false
 
     init {
         snapshotObserver.startObserving()
@@ -131,10 +132,12 @@ internal class RootNodeOwner(
     }
 
     fun dispose() {
+        check(!isDisposed) { "RootNodeOwner is already disposed" }
         platformContext.semanticsOwnerListener?.onSemanticsOwnerDisposed(semanticsOwner)
         platformContext.rootForTestListener?.onRootForTestDisposed(rootForTest)
         snapshotObserver.stopObserving()
         // we don't need to call root.detach() because root will be garbage collected
+        isDisposed = true
     }
 
     private var needClearObservations = false
