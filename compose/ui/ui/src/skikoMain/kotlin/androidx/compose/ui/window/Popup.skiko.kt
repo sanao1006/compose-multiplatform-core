@@ -455,6 +455,15 @@ private fun PopupLayout(
     }
 }
 
+@Composable
+private fun EmptyLayout(modifier: Modifier = Modifier) = Layout(
+    content = {},
+    modifier = modifier,
+    measurePolicy = { _, _ ->
+        layout(0, 0) {}
+    }
+)
+
 private val PopupProperties.insetsConfig: InsetsConfig
     get() = if (usePlatformInsets) PlatformInsetsConfig else ZeroInsetsConfig
 

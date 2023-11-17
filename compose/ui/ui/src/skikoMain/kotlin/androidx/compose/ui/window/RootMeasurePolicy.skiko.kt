@@ -16,9 +16,6 @@
 
 package androidx.compose.ui.window
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.PlatformInsets
@@ -33,17 +30,6 @@ import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.util.fastMaxBy
 import kotlin.math.min
-
-@Composable
-internal fun EmptyLayout(
-    modifier: Modifier = Modifier
-) = Layout(
-    content = {},
-    modifier = modifier,
-    measurePolicy = { _, _ ->
-        layout(0, 0) {}
-    }
-)
 
 internal fun RootMeasurePolicy(
     platformInsets: PlatformInsets,
