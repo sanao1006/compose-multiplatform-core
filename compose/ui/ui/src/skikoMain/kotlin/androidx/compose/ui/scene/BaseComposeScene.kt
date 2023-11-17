@@ -110,6 +110,13 @@ internal abstract class BaseComposeScene(
         check(!isClosed) { "ComposeScene is closed" }
         inputHandler.onChangeContent()
 
+        /*
+         * Perform all pending work synchronously.
+         * It's required before setting content to apply changed parameters
+         * before first recomposition. Otherwise, it can lead to double recomposition.
+         */
+        recomposer.flush()
+
         composition?.dispose()
         composition = createComposition {
             CompositionLocalProvider(

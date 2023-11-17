@@ -147,7 +147,8 @@ internal class ComposeWindowDelegate(
     ) {
         bridge.setKeyEventListener(
             onPreviewKeyEvent = onPreviewKeyEvent,
-            onKeyEvent = onKeyEvent,)
+            onKeyEvent = onKeyEvent
+        )
         bridge.setContent {
             CompositionLocalProvider(
                 LocalWindow provides window,
