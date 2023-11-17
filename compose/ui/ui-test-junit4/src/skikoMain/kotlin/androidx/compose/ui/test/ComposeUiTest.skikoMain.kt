@@ -188,8 +188,8 @@ class SkikoComposeUiTest(
         coroutineContext = coroutineContext,
         composeSceneContext = TestComposeSceneContext(),
         invalidate = { }
-    ).apply {
-        bounds = IntRect(IntOffset.Zero, size)
+    ).also {
+        it.size = size
     }
 
     private fun shouldPumpTime(): Boolean {

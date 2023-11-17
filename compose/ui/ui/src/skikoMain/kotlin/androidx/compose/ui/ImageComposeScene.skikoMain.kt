@@ -138,9 +138,9 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
         density = density,
         layoutDirection = layoutDirection,
         coroutineContext = coroutineContext,
-    ).apply {
-        bounds = IntRect(IntOffset.Zero, IntSize(width, height))
-        setContent(content = content)
+    ).also {
+        it.size = IntSize(width, height)
+        it.setContent(content = content)
     }
 
     /**
@@ -172,13 +172,11 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      * Constraints used to measure and layout content.
      */
     var constraints: Constraints
-        get() = with(scene.bounds) { Constraints(maxWidth = width, maxHeight = height) }
+        get() = with(scene.size) { Constraints(maxWidth = width, maxHeight = height) }
         set(value) {
-            scene.bounds = IntRect(
-                IntOffset.Zero, IntSize(
-                    width = value.maxWidth,
-                    height = value.maxHeight
-                )
+            scene.size = IntSize(
+                width = value.maxWidth,
+                height = value.maxHeight
             )
         }
 

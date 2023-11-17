@@ -55,14 +55,14 @@ import kotlinx.coroutines.Dispatchers
 fun CombinedComposeScene(
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    bounds: IntRect = IntRect.Zero,
+    size: IntSize = IntSize.Zero,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
     composeSceneContext: ComposeSceneContext = ComposeSceneContext.Empty,
     invalidate: () -> Unit = {},
 ): ComposeScene = CombinedComposeSceneImpl(
     density = density,
     layoutDirection = layoutDirection,
-    bounds = bounds,
+    size = size,
     coroutineContext = coroutineContext,
     composeSceneContext = composeSceneContext,
     invalidate = invalidate
@@ -72,7 +72,7 @@ fun CombinedComposeScene(
 private class CombinedComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
-    bounds: IntRect,
+    size: IntSize,
     coroutineContext: CoroutineContext,
     composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
@@ -84,7 +84,7 @@ private class CombinedComposeSceneImpl(
     private val mainOwner = RootNodeOwner(
         density = density,
         layoutDirection = layoutDirection,
-        bounds = bounds,
+        bounds = IntRect(IntOffset.Zero, size),
         coroutineContext = compositionContext.effectCoroutineContext,
         platformContext = composeSceneContext.platformContext,
         snapshotInvalidationTracker = snapshotInvalidationTracker,
@@ -105,11 +105,11 @@ private class CombinedComposeSceneImpl(
             mainOwner.layoutDirection = value
         }
 
-    override var bounds: IntRect = bounds
+    override var size: IntSize = size
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner.bounds = bounds
+            mainOwner.bounds = IntRect(IntOffset.Zero, size)
         }
 
     override val focusManager: ComposeSceneFocusManager =
@@ -453,7 +453,7 @@ private class CombinedComposeSceneImpl(
             density = density,
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
-            bounds = this@CombinedComposeSceneImpl.bounds,
+            bounds = IntRect(IntOffset.Zero, size),
             platformContext = composeSceneContext.platformContext,
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
@@ -463,7 +463,7 @@ private class CombinedComposeSceneImpl(
 
         override var density: Density by owner::density
         override var layoutDirection: LayoutDirection by owner::layoutDirection
-        override var bounds: IntRect by mutableStateOf(this@CombinedComposeSceneImpl.bounds)
+        override var bounds: IntRect by mutableStateOf(owner.bounds)
         override var scrimColor: Color? by mutableStateOf(null)
         override var focusable: Boolean = focusable
             set(value) {

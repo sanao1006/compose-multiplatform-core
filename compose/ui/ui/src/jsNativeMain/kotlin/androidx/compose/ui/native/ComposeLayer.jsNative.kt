@@ -142,7 +142,7 @@ internal class ComposeLayer(
     }
 
     fun setSize(width: Int, height: Int) {
-        scene.bounds = IntRect(IntOffset.Zero, IntSize(width, height))
+        scene.size = IntSize(width, height)
 
         layer.needRedraw()
     }

@@ -448,7 +448,7 @@ internal actual class ComposeWindow : UIViewController {
         }
         _windowInfo.containerSize = size
         context.scene.density = density
-        context.scene.bounds = IntRect(IntOffset.Zero, size)
+        context.scene.size = size
 
         context.view.needRedraw()
     }

@@ -352,7 +352,7 @@ internal abstract class ComposeBridge(
             height = (component.height * scale).toInt()
         )
         windowInfo.containerSize = size
-        scene.bounds = IntRect(IntOffset.Zero, size)
+        scene.size = size
     }
 
     protected fun resetSceneDensity() {
