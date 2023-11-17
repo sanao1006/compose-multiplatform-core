@@ -443,8 +443,7 @@ internal abstract class ComposeBridge(
         override val windowInfo: WindowInfo get() = this@ComposeBridge.windowInfo
         override var isWindowTransparent: Boolean = false
         override val viewConfiguration: ViewConfiguration = DesktopViewConfiguration()
-        override val textInputService: PlatformTextInputService =
-            DesktopTextInputService(platformComponent)
+        override val textInputService: PlatformTextInputService = desktopTextInputService
 
         override fun setPointerIcon(pointerIcon: PointerIcon) {
             component.cursor =
