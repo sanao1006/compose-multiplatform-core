@@ -32,8 +32,6 @@ import androidx.compose.ui.scene.toPointerKeyboardModifiers
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -149,8 +147,12 @@ internal abstract class ComposeBridge(
 
     private val windowInfo = WindowInfoImpl()
     private val desktopTextInputService = DesktopTextInputService(platformComponent)
-    private val accessibilityListener = DesktopSemanticsOwnerListener()
     protected val platformContext = DesktopPlatformContext()
+
+    private val semanticsOwnerListener = DesktopSemanticsOwnerListener()
+    val sceneAccessible = ComposeSceneAccessible {
+        semanticsOwnerListener.accessibilityControllers
+    }
 
     private val sceneCoroutineContext = MainUIDispatcher + coroutineExceptionHandler
     internal val scene = CombinedComposeScene(
@@ -164,10 +166,6 @@ internal abstract class ComposeBridge(
             onComposeInvalidation()
         },
     )
-
-    val sceneAccessible = ComposeSceneAccessible {
-        accessibilityListener.accessibilityControllers
-    }
 
     var compositionLocalContext: CompositionLocalContext? by scene::compositionLocalContext
 
@@ -352,7 +350,7 @@ internal abstract class ComposeBridge(
             height = (component.height * scale).toInt()
         )
         windowInfo.containerSize = size
-        scene.size = size
+        scene.size = size.takeIf { size != IntSize.Zero }
     }
 
     protected fun resetSceneDensity() {
@@ -413,7 +411,7 @@ internal abstract class ComposeBridge(
     private inner class DesktopSemanticsOwnerListener : PlatformContext.SemanticsOwnerListener {
         // Keep insertion-order via linked map
         private val _accessibilityControllers = linkedMapOf<SemanticsOwner, AccessibilityController>()
-        val accessibilityControllers get() = _accessibilityControllers.values.toList()
+        val accessibilityControllers get() = _accessibilityControllers.values.reversed()
 
         override fun onSemanticsOwnerCreated(semanticsOwner: SemanticsOwner) {
             val accessibilityController = AccessibilityController(
@@ -457,7 +455,7 @@ internal abstract class ComposeBridge(
         override val rootForTestListener: PlatformContext.RootForTestListener?
             get() = null
         override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener?
-            get() = this@ComposeBridge.accessibilityListener
+            get() = this@ComposeBridge.semanticsOwnerListener
     }
 
     private class InvisibleComponent : Component() {

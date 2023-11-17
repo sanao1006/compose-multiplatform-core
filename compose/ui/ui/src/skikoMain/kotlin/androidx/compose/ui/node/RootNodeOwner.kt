@@ -78,7 +78,7 @@ import kotlin.coroutines.CoroutineContext
 internal class RootNodeOwner(
     density: Density,
     layoutDirection: LayoutDirection,
-    bounds: IntRect,
+    bounds: IntRect?,
     coroutineContext: CoroutineContext,
     val platformContext: PlatformContext,
     private val snapshotInvalidationTracker: SnapshotInvalidationTracker,
@@ -165,7 +165,7 @@ internal class RootNodeOwner(
                 height = children.maxOfOrNull { it.outerCoordinator.measuredHeight } ?: 0,
             )
         } finally {
-            measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
+            measureAndLayoutDelegate.updateRootConstraints(bounds?.toConstraints() ?: Constraints())
         }
     }
 
@@ -188,7 +188,7 @@ internal class RootNodeOwner(
             platformContext.inputModeManager.requestInputMode(InputMode.Touch)
         }
         val isInBounds = event.eventType != PointerEventType.Exit && event.pointers.all {
-            bounds.contains(it.position.round())
+            bounds?.contains(it.position.round()) ?: true
         }
         pointerInputEventProcessor.process(
             event,
@@ -267,7 +267,7 @@ internal class RootNodeOwner(
         }
 
         override fun measureAndLayout(sendPointerUpdate: Boolean) {
-            measureAndLayoutDelegate.updateRootConstraints(bounds.toConstraints())
+            measureAndLayoutDelegate.updateRootConstraints(bounds?.toConstraints() ?: Constraints())
             val rootNodeResized = measureAndLayoutDelegate.measureAndLayout {
                 if (sendPointerUpdate) {
                     inputHandler.onPointerUpdate()
@@ -393,12 +393,10 @@ internal class RootNodeOwner(
         override val textInputService get() = owner.textInputService
         override val semanticsOwner get() = this@RootNodeOwner.semanticsOwner
         override val visibleBounds: IntRect
-            get() = bounds.intersect(
-                IntRect(
-                    offset = IntOffset.Zero,
-                    size = platformContext.windowInfo.containerSize
-                )
-            )
+            get() {
+                val container = IntRect(IntOffset.Zero, platformContext.windowInfo.containerSize)
+                return bounds?.intersect(container) ?: container
+            }
 
         override val hasPendingMeasureOrLayout: Boolean
             get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout

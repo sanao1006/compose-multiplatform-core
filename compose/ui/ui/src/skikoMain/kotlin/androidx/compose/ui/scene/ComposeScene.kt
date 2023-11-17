@@ -83,7 +83,7 @@ interface ComposeScene {
      */
     var layoutDirection: LayoutDirection
 
-    var size: IntSize
+    var size: IntSize?
 
     val composeSceneContext: ComposeSceneContext
 

@@ -194,13 +194,8 @@ class ComposeScene internal constructor(
      * Constraints used to measure and layout content.
      */
     var constraints: Constraints
-        get() = with(replacement.size) { Constraints(maxWidth = width, maxHeight = height) }
-        set(value) {
-            replacement.size = IntSize(
-                width = value.maxWidth,
-                height = value.maxHeight
-            )
-        }
+        get() = replacement.size?.toConstraints() ?: Constraints()
+        set(value) { replacement.size = value.toSize() }
 
     /**
      * Returns the current content size
@@ -371,3 +366,12 @@ class ComposeScene internal constructor(
         return replacement.focusManager.moveFocus(focusDirection)
     }
 }
+
+private fun Constraints.toSize() =
+    if (maxWidth != Constraints.Infinity || maxHeight != Constraints.Infinity) {
+        IntSize(width = maxWidth, height = maxHeight)
+    } else {
+        null
+    }
+
+private fun IntSize.toConstraints() = Constraints(maxWidth = width, maxHeight = height)

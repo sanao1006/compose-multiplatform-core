@@ -172,13 +172,8 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      * Constraints used to measure and layout content.
      */
     var constraints: Constraints
-        get() = with(scene.size) { Constraints(maxWidth = width, maxHeight = height) }
-        set(value) {
-            scene.size = IntSize(
-                width = value.maxWidth,
-                height = value.maxHeight
-            )
-        }
+        get() = scene.size?.toConstraints() ?: Constraints()
+        set(value) { scene.size = value.toSize() }
 
     /**
      * Returns true if there are pending recompositions, renders or dispatched tasks.
@@ -305,3 +300,12 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      */
     fun sendKeyEvent(event: KeyEvent): Boolean = scene.sendKeyEvent(event)
 }
+
+private fun Constraints.toSize() =
+    if (maxWidth != Constraints.Infinity || maxHeight != Constraints.Infinity) {
+        IntSize(width = maxWidth, height = maxHeight)
+    } else {
+        null
+    }
+
+private fun IntSize.toConstraints() = Constraints(maxWidth = width, maxHeight = height)

@@ -3299,8 +3299,8 @@ public final class androidx/compose/ui/res/Resources_desktopKt {
 }
 
 public final class androidx/compose/ui/scene/CombinedComposeSceneKt {
-	public static final fun CombinedComposeScene-oSjs1mQ (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;JLkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;)Landroidx/compose/ui/scene/ComposeScene;
-	public static synthetic fun CombinedComposeScene-oSjs1mQ$default (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;JLkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Landroidx/compose/ui/scene/ComposeScene;
+	public static final fun CombinedComposeScene-3tKcejY (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;Landroidx/compose/ui/unit/IntSize;Lkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;)Landroidx/compose/ui/scene/ComposeScene;
+	public static synthetic fun CombinedComposeScene-3tKcejY$default (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;Landroidx/compose/ui/unit/IntSize;Lkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Landroidx/compose/ui/scene/ComposeScene;
 }
 
 public abstract interface class androidx/compose/ui/scene/ComposeScene {
@@ -3313,7 +3313,7 @@ public abstract interface class androidx/compose/ui/scene/ComposeScene {
 	public abstract fun getFocusManager ()Landroidx/compose/ui/scene/ComposeSceneFocusManager;
 	public abstract fun getLastKnownPointerPosition-_m7T9-E ()Landroidx/compose/ui/geometry/Offset;
 	public abstract fun getLayoutDirection ()Landroidx/compose/ui/unit/LayoutDirection;
-	public abstract fun getSize-YbymL2g ()J
+	public abstract fun getSize-bOM6tXw ()Landroidx/compose/ui/unit/IntSize;
 	public abstract fun hasInvalidations ()Z
 	public abstract fun hitTestInteropView-k-4lQ0M (J)Z
 	public abstract fun render (Landroidx/compose/ui/graphics/Canvas;J)V
@@ -3328,7 +3328,7 @@ public abstract interface class androidx/compose/ui/scene/ComposeScene {
 	public abstract fun setKeyEventListener (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)V
 	public static synthetic fun setKeyEventListener$default (Landroidx/compose/ui/scene/ComposeScene;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
 	public abstract fun setLayoutDirection (Landroidx/compose/ui/unit/LayoutDirection;)V
-	public abstract fun setSize-ozmzZPI (J)V
+	public abstract fun setSize-fhxjrPA (Landroidx/compose/ui/unit/IntSize;)V
 }
 
 public abstract interface class androidx/compose/ui/scene/ComposeSceneContext {
@@ -3382,8 +3382,8 @@ public final class androidx/compose/ui/scene/ComposeScenePointer {
 }
 
 public final class androidx/compose/ui/scene/SimpleComposeSceneKt {
-	public static final fun ComposeScene-oSjs1mQ (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;JLkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;)Landroidx/compose/ui/scene/ComposeScene;
-	public static synthetic fun ComposeScene-oSjs1mQ$default (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;JLkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Landroidx/compose/ui/scene/ComposeScene;
+	public static final fun ComposeScene-3tKcejY (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;Landroidx/compose/ui/unit/IntSize;Lkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;)Landroidx/compose/ui/scene/ComposeScene;
+	public static synthetic fun ComposeScene-3tKcejY$default (Landroidx/compose/ui/unit/Density;Landroidx/compose/ui/unit/LayoutDirection;Landroidx/compose/ui/unit/IntSize;Lkotlin/coroutines/CoroutineContext;Landroidx/compose/ui/scene/ComposeSceneContext;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Landroidx/compose/ui/scene/ComposeScene;
 }
 
 public final class androidx/compose/ui/semantics/AccessibilityAction {

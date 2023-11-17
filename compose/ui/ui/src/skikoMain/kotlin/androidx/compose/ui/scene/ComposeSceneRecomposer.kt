@@ -77,7 +77,7 @@ internal class ComposeSceneRecomposer(
      * Perform all scheduled tasks and wait for the tasks which are already
      * performing in the recomposition scope.
      */
-    fun flush() {
+    fun performScheduledTasks() {
         recomposeDispatcher.flush()
     }
 

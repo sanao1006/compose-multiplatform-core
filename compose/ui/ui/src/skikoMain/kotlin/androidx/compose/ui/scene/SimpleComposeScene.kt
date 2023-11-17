@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.toIntRect
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 
@@ -42,7 +43,7 @@ import kotlinx.coroutines.Dispatchers
 fun ComposeScene(
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    size: IntSize = IntSize.Zero,
+    size: IntSize? = null,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
     composeSceneContext: ComposeSceneContext = ComposeSceneContext.Empty,
     invalidate: () -> Unit = {},
@@ -59,7 +60,7 @@ fun ComposeScene(
 private class SimpleComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
-    size: IntSize,
+    size: IntSize?,
     coroutineContext: CoroutineContext,
     composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
@@ -73,7 +74,7 @@ private class SimpleComposeSceneImpl(
             density = density,
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
-            bounds = IntRect(IntOffset.Zero, size),
+            bounds = size?.toIntRect(),
             platformContext = composeSceneContext.platformContext,
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
@@ -94,11 +95,11 @@ private class SimpleComposeSceneImpl(
             mainOwner.layoutDirection = value
         }
 
-    override var size: IntSize = size
+    override var size: IntSize? = size
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner.bounds = IntRect(IntOffset.Zero, size)
+            mainOwner.bounds = value?.toIntRect()
         }
 
     override val focusManager: ComposeSceneFocusManager =

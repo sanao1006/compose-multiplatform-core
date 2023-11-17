@@ -111,11 +111,10 @@ internal abstract class BaseComposeScene(
         inputHandler.onChangeContent()
 
         /*
-         * Perform all pending work synchronously.
          * It's required before setting content to apply changed parameters
          * before first recomposition. Otherwise, it can lead to double recomposition.
          */
-        recomposer.flush()
+        recomposer.performScheduledTasks()
 
         composition?.dispose()
         composition = createComposition {
@@ -125,12 +124,11 @@ internal abstract class BaseComposeScene(
             )
         }
 
-        // Perform all pending work synchronously
-        recomposer.flush()
+        recomposer.performScheduledTasks()
     }
 
     override fun render(canvas: Canvas, nanoTime: Long) = postponeInvalidation {
-        recomposer.flush()
+        recomposer.performScheduledTasks()
         frameClock.sendFrame(nanoTime) // Recomposition
 
         snapshotInvalidationTracker.onLayout()

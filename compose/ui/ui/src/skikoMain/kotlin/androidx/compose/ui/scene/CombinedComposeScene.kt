@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.toIntRect
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachReversed
@@ -55,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 fun CombinedComposeScene(
     density: Density = Density(1f),
     layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    size: IntSize = IntSize.Zero,
+    size: IntSize? = null,
     coroutineContext: CoroutineContext = Dispatchers.Unconfined,
     composeSceneContext: ComposeSceneContext = ComposeSceneContext.Empty,
     invalidate: () -> Unit = {},
@@ -72,7 +73,7 @@ fun CombinedComposeScene(
 private class CombinedComposeSceneImpl(
     density: Density,
     layoutDirection: LayoutDirection,
-    size: IntSize,
+    size: IntSize?,
     coroutineContext: CoroutineContext,
     composeSceneContext: ComposeSceneContext,
     invalidate: () -> Unit = {},
@@ -84,7 +85,7 @@ private class CombinedComposeSceneImpl(
     private val mainOwner = RootNodeOwner(
         density = density,
         layoutDirection = layoutDirection,
-        bounds = IntRect(IntOffset.Zero, size),
+        bounds = size?.toIntRect(),
         coroutineContext = compositionContext.effectCoroutineContext,
         platformContext = composeSceneContext.platformContext,
         snapshotInvalidationTracker = snapshotInvalidationTracker,
@@ -105,11 +106,12 @@ private class CombinedComposeSceneImpl(
             mainOwner.layoutDirection = value
         }
 
-    override var size: IntSize = size
+    override var size: IntSize? = size
         set(value) {
             check(!isClosed) { "ComposeScene is closed" }
             field = value
-            mainOwner.bounds = IntRect(IntOffset.Zero, size)
+            mainOwner.bounds = value?.toIntRect()
+            forEachLayer { it.size = value }
         }
 
     override val focusManager: ComposeSceneFocusManager =
@@ -118,10 +120,7 @@ private class CombinedComposeSceneImpl(
     private var isFocused = true
     private val layers = mutableListOf<AttachedComposeSceneLayer>()
     private val _layersCopyCache = CopiedList {
-        it.add(null)
-        for (layer in layers) {
-            it.add(layer)
-        }
+        it.addAll(layers)
     }
     private val _ownersCopyCache = CopiedList {
         it.add(mainOwner)
@@ -130,7 +129,12 @@ private class CombinedComposeSceneImpl(
         }
     }
 
-    private inline fun forEachLayerReversed(action: (AttachedComposeSceneLayer?) -> Unit) =
+    private inline fun forEachLayer(action: (AttachedComposeSceneLayer) -> Unit) =
+        _layersCopyCache.withCopy {
+            it.fastForEach(action)
+        }
+
+    private inline fun forEachLayerReversed(action: (AttachedComposeSceneLayer) -> Unit) =
         _layersCopyCache.withCopy {
             it.fastForEachReversed(action)
         }
@@ -153,9 +157,7 @@ private class CombinedComposeSceneImpl(
     override fun close() {
         check(!isClosed) { "ComposeScene is already closed" }
         mainOwner.dispose()
-        forEachLayerReversed {
-            it?.close()
-        }
+        forEachLayer { it.close() }
         super.close()
     }
 
@@ -191,16 +193,13 @@ private class CombinedComposeSceneImpl(
         //  and handle only that ones that were received in interop view
         //  instead of using [pointInside].
         forEachLayerReversed { layer ->
-            if (layer == null || layer.isInBounds(position)) {
-                val owner = layer?.owner ?: mainOwner
-                return owner.hitTestInteropView(position)
+            if (layer.isInBounds(position)) {
+                return layer.owner.hitTestInteropView(position)
             } else if (layer == focusedLayer) {
                 return false
             }
         }
-
-        // We didn't pass isInBounds check for any owner 🤷
-        return false
+        return mainOwner.hitTestInteropView(position)
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent) {
@@ -269,10 +268,9 @@ private class CombinedComposeSceneImpl(
         forEachLayerReversed { layer ->
 
             // If the position of in bounds of the owner - send event to it and stop processing
-            if (layer == null || layer.isInBounds(position)) {
-                val owner = layer?.owner ?: mainOwner
-                owner.onPointerInput(event)
-                gestureOwner = owner
+            if (layer.isInBounds(position)) {
+                layer.owner.onPointerInput(event)
+                gestureOwner = layer.owner
                 return
             }
 
@@ -284,6 +282,8 @@ private class CombinedComposeSceneImpl(
                 return
             }
         }
+        mainOwner.onPointerInput(event)
+        gestureOwner = mainOwner
     }
 
     private fun processRelease(event: PointerInputEvent) {
@@ -366,6 +366,7 @@ private class CombinedComposeSceneImpl(
     ): ComposeSceneLayer = AttachedComposeSceneLayer(
         density = density,
         layoutDirection = layoutDirection,
+        size = size,
         focusable = focusable,
         compositionContext = compositionContext,
     )
@@ -446,6 +447,7 @@ private class CombinedComposeSceneImpl(
     private inner class AttachedComposeSceneLayer(
         density: Density,
         layoutDirection: LayoutDirection,
+        size: IntSize?,
         focusable: Boolean,
         private val compositionContext: CompositionContext,
     ) : ComposeSceneLayer {
@@ -453,7 +455,7 @@ private class CombinedComposeSceneImpl(
             density = density,
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
-            bounds = IntRect(IntOffset.Zero, size),
+            bounds = size?.toIntRect(),
             platformContext = composeSceneContext.platformContext,
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
@@ -462,9 +464,15 @@ private class CombinedComposeSceneImpl(
         private var callback: ((Boolean) -> Unit)? = null
         private var isClosed = false
 
+        var size: IntSize? = size
+            set(value) {
+                field = value
+                owner.bounds = value?.toIntRect()
+            }
+
         override var density: Density by owner::density
         override var layoutDirection: LayoutDirection by owner::layoutDirection
-        override var bounds: IntRect by mutableStateOf(owner.bounds)
+        override var bounds: IntRect by mutableStateOf(owner.bounds ?: IntRect.Zero)
         override var scrimColor: Color? by mutableStateOf(null)
         override var focusable: Boolean = focusable
             set(value) {
@@ -531,6 +539,7 @@ private class CombinedComposeSceneImpl(
         }
 
         override fun setContent(content: @Composable () -> Unit) {
+            check(!isClosed) { "AttachedComposeSceneLayer is closed" }
             composition?.dispose()
             composition = owner.setContent(parent = compositionContext) {
                 owner.setRootModifier(background then keyInput)
