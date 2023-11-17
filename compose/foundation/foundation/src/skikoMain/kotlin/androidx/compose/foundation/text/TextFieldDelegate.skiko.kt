@@ -16,13 +16,17 @@
 
 package androidx.compose.foundation.text
 
-import kotlin.text.CharCategory.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.findNextNonWhitespaceSymbolsSubsequenceStartOffset
+import androidx.compose.ui.text.halfSymbolsOffset
 import androidx.compose.ui.text.input.EditProcessor
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.isPunctuation
+import androidx.compose.ui.text.isWhitespace
 
 /**
  * Sets and adjusts the cursor offset when the TextField is focused in a Cupertino style.
@@ -59,7 +63,6 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
     if (cursorDesiredOffset == offset) {
         showContextMenu(textLayoutResult.value.getCursorRect(offset))
     }
-
     onValueChange(
         editProcessor.toTextFieldValue().copy(selection = TextRange(cursorDesiredOffset))
     )
@@ -73,7 +76,7 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
  * - If there’s a punctuation mark after the word, the caret is between the word and the punctuation mark.
  * - If you tap on a whitespace, the caret is placed before the word. Same for many whitespaces in a row. (and punctuation marks)
  * - If there’s a punctuation mark before the word, the caret is between the punctuation mark and the word.
- * - When you make a single tap on the first letter of the word, the caret is placed before this word.
+ * - When you make a single tap on the first half of the word, the caret is placed before this word.
  * - If you tap on the left edge of the TextField, the caret is placed before the first word on this line. The same is for the right edge.
  * - If you tap at the caret, that is placed in the middle of the word, it will jump to the end of the word.
  * @param offset The current offset position.
@@ -82,6 +85,7 @@ internal fun TextFieldDelegate.Companion.cupertinoSetCursorOffsetFocused(
  * @param currentText The current text in the TextField.
  * @return The desired cursor position after evaluating the given parameters.
  */
+@OptIn(ExperimentalTextApi::class)
 internal fun determineCursorDesiredOffset(
     offset: Int,
     currentValue: TextFieldValue,
@@ -97,10 +101,11 @@ internal fun determineCursorDesiredOffset(
     } else if (textLayoutResult.isRightEdgeTapped(offset)) {
         val lineNumber = textLayoutResult.value.getLineForOffset(offset)
         caretOffsetPosition = textLayoutResult.value.getLineEnd(lineNumber)
-    } else if (isPunctuationOrSpaceBeforeWordTapped(offset, currentText)) {
-        val nextWordBoundary = findNextWordBoundary(offset, currentText, textLayoutResult)
-        caretOffsetPosition = nextWordBoundary.start
-    } else if (textLayoutResult.isFirstLetterOfWordTapped(offset)) {
+    } else if (isPunctuationOrSpaceTapped(offset, currentText)) {
+        val nextWordStartOffset =
+            findNextNonWhitespaceSymbolsSubsequenceStartOffset(offset, currentText)
+        caretOffsetPosition = nextWordStartOffset
+    } else if (textLayoutResult.isFirstHalfOfWordTapped(offset, currentText)) {
         val wordBoundary = textLayoutResult.value.getWordBoundary(offset)
         caretOffsetPosition = wordBoundary.start
     } else {
@@ -110,23 +115,24 @@ internal fun determineCursorDesiredOffset(
     return caretOffsetPosition
 }
 
-private fun isPunctuationOrSpaceBeforeWordTapped(
+@OptIn(ExperimentalTextApi::class)
+private fun isPunctuationOrSpaceTapped(
     caretOffset: Int,
     currentText: String
 ): Boolean {
     /* From TextLayoutResultProxy.value.getWordBoundary(caretOffset) it is clear
     * that for whitespace or punctuation mark method will return empty range.
-    * Thus, if empty range was returned, and the caretOffset greater than start and less than last index of text
-    * then offset should be somewhere between words.
+    * caretOffset can be between 0...currentText.length, so it should be somewhere between words.
     * */
-    val char = currentText[caretOffset]
-    val isGreaterThanFirst = caretOffset >= 0
-    val isLessThanLast = caretOffset <= currentText.lastIndex
-    return char.isPunctuationOrWhitespace() && isGreaterThanFirst && isLessThanLast
+    return currentText.isPunctuation(caretOffset) || currentText.isWhitespace(caretOffset)
 }
 
-private fun TextLayoutResultProxy.isFirstLetterOfWordTapped(caretOffset: Int): Boolean {
-    return value.getWordBoundary(caretOffset).start == caretOffset
+@OptIn(ExperimentalTextApi::class)
+private fun TextLayoutResultProxy.isFirstHalfOfWordTapped(caretOffset: Int, currentText: String): Boolean {
+    val wordBoundary = value.getWordBoundary(caretOffset)
+    val word = currentText.substring(wordBoundary.start, wordBoundary.end)
+    val middleIndex = wordBoundary.start + word.halfSymbolsOffset()
+    return caretOffset < middleIndex
 }
 
 private fun isCaretTapped(
@@ -146,78 +152,4 @@ private fun TextLayoutResultProxy.isRightEdgeTapped(caretOffset: Int): Boolean {
     val lineNumber = value.getLineForOffset(caretOffset)
     val lineEndOffset = value.getLineEnd(lineNumber)
     return lineEndOffset == caretOffset
-}
-
-/**
- * Recursively finds the next word boundary position starting from the given caret offset in the current text.
- * The main difference between this and **getWordBoundary()** in *Paragraph.kt* is that
- * this method finds next word boundary in case if caret positioned in between two words
- * (so caret is pointing at punctuation or whitespace), whereas **getWordBoundary()** will return
- * empty TextRange with the beginning on caret position
- *
- * @param caretOffset the offset of the caret position
- * @param currentText the current text
- * @param textLayoutResult the TextLayoutResultProxy object that provides text layout information
- * @return the TextRange representing the next word boundary position
- */
-private tailrec fun findNextWordBoundary(
-    caretOffset: Int,
-    currentText: String,
-    textLayoutResult: TextLayoutResultProxy
-): TextRange {
-    val wordRange = textLayoutResult.value.getWordBoundary(caretOffset)
-    val currentChar = currentText[caretOffset]
-    val lastIndex = currentText.lastIndex
-    return if (caretOffset > lastIndex) {
-        TextRange(lastIndex)
-    } else if (currentChar.isWhitespace()) {
-        findNextWordBoundary(caretOffset + 1, currentText, textLayoutResult)
-    } else if (!currentChar.isPunctuation()) {
-        wordRange // not a whitespace or punctuation
-    } else {
-        getSymbolsOnlySubsequenceBoundaries(
-            caretOffset,
-            currentText
-        ) // may be null (example: aaa...)
-            ?: findNextWordBoundary(caretOffset + 1, currentText, textLayoutResult)
-    }
-}
-
-private fun getSymbolsOnlySubsequenceBoundaries(caretOffset: Int, currentText: String): TextRange? {
-    var leadOffset = caretOffset
-    var trailOffset = caretOffset
-    val lastIndex = currentText.lastIndex
-    while (!currentText[leadOffset].isWhitespace() && leadOffset >= 0) {
-        if (!currentText[leadOffset].isPunctuation()) {
-            return null
-        }
-        leadOffset -= 1
-    }
-    while (!currentText[leadOffset].isWhitespace() && trailOffset <= lastIndex) {
-        if (!currentText[trailOffset].isPunctuation()) {
-            return null
-        }
-        trailOffset += 1
-    }
-    return TextRange(leadOffset, trailOffset)
-}
-
-private fun Char.isPunctuationOrWhitespace(): Boolean {
-    return this.isPunctuation() || this.isWhitespace()
-}
-
-private fun Char.isPunctuation(): Boolean {
-    val punctuationSet = setOf(
-        DASH_PUNCTUATION,
-        START_PUNCTUATION,
-        END_PUNCTUATION,
-        CONNECTOR_PUNCTUATION,
-        OTHER_PUNCTUATION
-    )
-    punctuationSet.forEach {
-        if (it.contains(this)) {
-            return true
-        }
-    }
-    return false
 }
