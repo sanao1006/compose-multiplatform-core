@@ -73,12 +73,10 @@ class ComposeSceneInputTest {
         while (scene.hasInvalidations())
             scene.render()
 
-        // FIXME: Offset(-10f, -10f) is out of scene bounds, expecting such events is incorrect
-        //  Replaced to Offset(1f, 1f) for now
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(1f, 1f))
+        scene.sendPointerEvent(PointerEventType.Enter, Offset(5f, 5f))
         background.events.assertReceivedNoEvents()
         cutPopup.events.assertReceivedLast(
-            PointerEventType.Enter, Offset(1f, 1f) - cutPopup.origin)
+            PointerEventType.Enter, Offset(5f, 5f) - cutPopup.origin)
         overlappedPopup.events.assertReceivedNoEvents()
         independentPopup.events.assertReceivedNoEvents()
 
@@ -170,14 +168,12 @@ class ComposeSceneInputTest {
         while (scene.hasInvalidations())
             scene.render()
 
-        // FIXME: Offset(-10f, -10f) is out of scene bounds, expecting such events is incorrect
-        //  Replaced to Offset(1f, 1f) for now
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(1f, 1f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(1f, 1f))
+        scene.sendPointerEvent(PointerEventType.Enter, Offset(5f, 5f))
+        scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f))
         background.events.assertReceivedNoEvents()
-        cutPopup.events.assertReceived(PointerEventType.Enter, Offset(1f, 1f) - cutPopup.origin)
+        cutPopup.events.assertReceived(PointerEventType.Enter, Offset(5f, 5f) - cutPopup.origin)
         cutPopup.events.assertReceivedLast(
-            PointerEventType.Press, Offset(1f, 1f) - cutPopup.origin)
+            PointerEventType.Press, Offset(5f, 5f) - cutPopup.origin)
         overlappedPopup.events.assertReceivedNoEvents()
         independentPopup.events.assertReceivedNoEvents()
 
@@ -254,23 +250,19 @@ class ComposeSceneInputTest {
             PointerEventType.Press, Offset(21f, 21f) - overlappedPopup.origin)
         independentPopup.events.assertReceivedNoEvents()
 
-        // FIXME: Offset(-10f, -10f) is out of scene bounds, expecting such events is incorrect
-        //  Replaced to Offset(1f, 1f) for now
-        scene.sendPointerEvent(PointerEventType.Move, Offset(1f, 1f))
+        scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
         background.events.assertReceivedNoEvents()
         cutPopup.events.assertReceivedNoEvents()
         overlappedPopup.events.assertReceivedLast(
-            PointerEventType.Exit, Offset(1f, 1f) - overlappedPopup.origin)
+            PointerEventType.Exit, Offset(5f, 5f) - overlappedPopup.origin)
         independentPopup.events.assertReceivedNoEvents()
 
-        // FIXME: Offset(-10f, -10f) is out of scene bounds, expecting such events is incorrect
-        //  Replaced to Offset(1f, 1f) for now
-        scene.sendPointerEvent(PointerEventType.Release, Offset(1f, 1f))
+        scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f))
         background.events.assertReceivedNoEvents()
         cutPopup.events.assertReceivedLast(
-            PointerEventType.Enter, Offset(1f, 1f) - cutPopup.origin)
+            PointerEventType.Enter, Offset(5f, 5f) - cutPopup.origin)
         overlappedPopup.events.assertReceivedLast(
-            PointerEventType.Release, Offset(1f, 1f) - overlappedPopup.origin
+            PointerEventType.Release, Offset(5f, 5f) - overlappedPopup.origin
         )
         overlappedPopup.events.assertReceivedNoEvents()
         independentPopup.events.assertReceivedNoEvents()
