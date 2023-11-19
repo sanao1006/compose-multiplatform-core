@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.utils
+package androidx.compose.ui.uikit.utils
 
 import platform.UIKit.UIView
 

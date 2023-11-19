@@ -208,12 +208,7 @@ if(AndroidXComposePlugin.isMultiplatformEnabled(project)) {
             }
             uikitMain {
                 dependencies {
-                    if (project.useObjcUtilsAsSources.toBoolean()) {
-                        api project(":compose:ui:ui-uikit")
-                    } else {
-                        // TODO: Use path from JetBrains maven
-                        implementation("me.user.ui:ui-uikit:1.0-SNAPSHOT")
-                    }
+                    api project(":compose:ui:ui-uikit")
                 }
             }
             notMobileMain.dependsOn(skikoMain)

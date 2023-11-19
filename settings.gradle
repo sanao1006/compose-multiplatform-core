@@ -246,9 +246,7 @@ includeProject(":compose:ui:ui-viewbinding")
 includeProject(":compose:ui:ui-viewbinding:ui-viewbinding-samples", "compose/ui/ui-viewbinding/samples")
 includeProject(":compose:ui:ui:integration-tests:ui-demos")
 includeProject(":compose:ui:ui:ui-samples", "compose/ui/ui/samples")
-if (useObjcUtilsAsSources.asBoolean()) {
-    includeProject(":compose:ui:ui-uikit")
-}
+includeProject(":compose:ui:ui-uikit")
 
 includeProject(":lint-checks")
 includeProject(":lint-checks:integration-tests")

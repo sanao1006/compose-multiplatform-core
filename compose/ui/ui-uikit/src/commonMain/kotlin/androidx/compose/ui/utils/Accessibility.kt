@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.utils
+package androidx.compose.ui.uikit.utils
 
 abstract class Accessibility {
     abstract fun getPlatform(): String
