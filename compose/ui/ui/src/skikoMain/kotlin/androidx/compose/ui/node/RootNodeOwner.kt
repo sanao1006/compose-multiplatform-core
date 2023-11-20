@@ -88,7 +88,7 @@ internal class RootNodeOwner(
     //  Check if ComposePanel/SwingPanel focus interop work correctly with new features of
     //  the focus system (it works with the old features like moveFocus/clearFocus)
     val focusOwner: FocusOwner = FocusOwnerImpl(
-        parent = platformContext.focusManager
+        parent = platformContext.parentFocusManager
     ) {
         owner.registerOnEndApplyChangesListener(it)
     }.also {

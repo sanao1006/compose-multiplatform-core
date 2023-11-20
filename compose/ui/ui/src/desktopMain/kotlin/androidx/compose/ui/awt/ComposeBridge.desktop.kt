@@ -447,7 +447,7 @@ internal abstract class ComposeBridge(
             component.cursor =
                 (pointerIcon as? AwtCursor)?.cursor ?: Cursor(Cursor.DEFAULT_CURSOR)
         }
-        override val focusManager: FocusManager = DesktopFocusManager()
+        override val parentFocusManager: FocusManager = DesktopFocusManager()
         override fun requestFocus(): Boolean {
             return component.hasFocus() || component.requestFocusInWindow()
         }

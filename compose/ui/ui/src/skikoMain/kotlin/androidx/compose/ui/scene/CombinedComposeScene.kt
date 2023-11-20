@@ -26,6 +26,7 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
@@ -38,6 +39,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.node.RootNodeOwner
+import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -456,7 +458,17 @@ private class CombinedComposeSceneImpl(
             layoutDirection = layoutDirection,
             coroutineContext = compositionContext.effectCoroutineContext,
             bounds = size?.toIntRect(),
-            platformContext = composeSceneContext.platformContext,
+            platformContext = object : PlatformContext by composeSceneContext.platformContext {
+
+                /**
+                 * Popup/Dialog shouldn't delegate focus to the parent.
+                 */
+                override val parentFocusManager: FocusManager
+                    get() = PlatformContext.Empty.parentFocusManager
+
+                // TODO: Figure out why real requestFocus is required
+                //  even with empty parentFocusManager
+            },
             snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
         )

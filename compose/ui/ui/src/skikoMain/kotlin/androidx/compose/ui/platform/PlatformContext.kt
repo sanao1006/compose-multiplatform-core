@@ -50,7 +50,7 @@ interface PlatformContext {
     val textToolbar: TextToolbar get() = EmptyTextToolbar
     fun setPointerIcon(pointerIcon: PointerIcon) = Unit
 
-    val focusManager: FocusManager get() = EmptyFocusManager
+    val parentFocusManager: FocusManager get() = EmptyFocusManager
     fun requestFocus(): Boolean = false
 
     val rootForTestListener: RootForTestListener? get() = null
