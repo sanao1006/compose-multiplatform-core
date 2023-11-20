@@ -87,7 +87,9 @@ internal class RootNodeOwner(
     // TODO(https://github.com/JetBrains/compose-multiplatform/issues/2944)
     //  Check if ComposePanel/SwingPanel focus interop work correctly with new features of
     //  the focus system (it works with the old features like moveFocus/clearFocus)
-    val focusOwner: FocusOwner = FocusOwnerImpl {
+    val focusOwner: FocusOwner = FocusOwnerImpl(
+        parent = platformContext.focusManager
+    ) {
         owner.registerOnEndApplyChangesListener(it)
     }.also {
         it.layoutDirection = layoutDirection
