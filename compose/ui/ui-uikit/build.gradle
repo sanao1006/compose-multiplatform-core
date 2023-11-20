@@ -14,20 +14,12 @@
  * limitations under the License.
  */
 
-
-import org.jetbrains.kotlin.konan.target.KonanTarget
+import androidx.build.LibraryType
 
 plugins {
+    id("AndroidXPlugin")
     id("kotlin-multiplatform")
-    id("maven-publish")
 }
-
-version = "1.0-SNAPSHOT"
-group = "me.user.ui"
-
-// Kotlin library: ui:ui-uikit
-// Package: androidx.compose.ui.uikit.utils
-// Objc-Library: CMPUIKitUtils
 
 kotlin {
     iosX64("uikitX64") {
@@ -132,4 +124,12 @@ def configureCInterop(target, isDevice) {
             freeCompilerArgs += compilerArgs
         }
     }
+}
+
+androidx {
+    name = "Compose UIKit Utils"
+    type = LibraryType.PUBLISHED_LIBRARY
+    inceptionYear = "2023"
+    description = "Internal iOS UIKit utilities including Objective-C library."
+    legacyDisableKotlinStrictApiMode = true
 }
